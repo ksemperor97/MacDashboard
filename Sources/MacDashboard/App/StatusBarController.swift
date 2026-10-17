@@ -115,83 +115,123 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         lastSystemKey = key
         systemItem.button?.image = columns.isEmpty
             ? NSImage(systemSymbolName: "gauge.with.dots.needle.33percent", accessibilityDescription: "MacDashboard")
-            : StatusImage.render(columns, pill: false)
+            : StatusImage.render([columns], pill: false)
     }
 
     private func updateUsageItem() {
         let d = Prefs.d
         usageItem.isVisible = d.bool(forKey: Prefs.menuUsage)
         guard usageItem.isVisible else { return }
-        let pinned = Prefs.pinned
         let remaining = Prefs.showRemaining
-        var columns: [StatusColumn] = []
-        if let u = model.usage[pinned]?.usage {
-            for w in u.badgeWindows {
+        var pinned = Prefs.pinned.filter(Prefs.isEnabled)
+        if pinned.isEmpty { pinned = Array(model.enabledProviders.prefix(1)) }
+        // With several services each gets its own pill, led by its icon so they can be told apart.
+        let showIcons = pinned.count > 1
+        let groups: [[StatusColumn]] = pinned.map { id in
+            var columns: [StatusColumn] = showIcons ? [.icon(id.symbol)] : []
+            let windows = model.usage[id]?.usage?.badgeWindows ?? []
+            for w in windows {
                 let used = w.effectiveUsed()
                 columns.append(.metric(w.kind.short ?? "", Format.percent(remaining ? 1 - used : used)))
             }
+            if windows.isEmpty {
+                columns.append(.metric(showIcons ? "" : String(id.displayName.prefix(6)).uppercased(), "–"))
+            }
+            return columns
         }
-        if columns.isEmpty { columns = [.metric(String(pinned.displayName.prefix(6)).uppercased(), "–")] }
-        let key = columns.map(\.key).joined(separator: "|")
+        let key = groups.map { $0.map(\.key).joined(separator: "|") }.joined(separator: "#")
         guard key != lastUsageKey else { return }
         lastUsageKey = key
-        usageItem.button?.image = StatusImage.render(columns, pill: true)
+        usageItem.button?.image = groups.isEmpty
+            ? StatusImage.render([[.metric("AI", "–")]], pill: true)
+            : StatusImage.render(groups, pill: true)
     }
 }
 
 enum StatusColumn {
     case metric(String, String)      // small caption over a bold value
     case stacked(String, String)     // two equal small lines (network rates)
+    case icon(String)                // SF Symbol identifying a service
 
     var key: String {
         switch self {
         case .metric(let a, let b): "m\(a)\(b)"
         case .stacked(let a, let b): "s\(a)\(b)"
+        case .icon(let name): "i\(name)"
         }
     }
 }
 
 /// Draws status item contents as a template image so it follows the menu bar's light/dark tint.
+/// Each group is drawn side by side; with `pill` every group gets its own rounded background.
 enum StatusImage {
-    static func render(_ columns: [StatusColumn], pill: Bool) -> NSImage {
+    static func render(_ groups: [[StatusColumn]], pill: Bool) -> NSImage {
         let caption = NSFont.systemFont(ofSize: 8, weight: .semibold)
         let value = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
         let small = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
+        let symbolConfig = NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
         let spacing: CGFloat = 8
+        let iconSpacing: CGFloat = 5
+        let groupGap: CGFloat = 4
         let padding: CGFloat = pill ? 7 : 1
         let height: CGFloat = 22
 
         func attrs(_ font: NSFont) -> [NSAttributedString.Key: Any] { [.font: font, .foregroundColor: NSColor.black] }
         func width(_ s: String, _ f: NSFont) -> CGFloat { ceil((s as NSString).size(withAttributes: attrs(f)).width) }
+        func symbol(_ name: String) -> NSImage? {
+            NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(symbolConfig)
+        }
 
         // Fixed minimum widths keep the item from jittering as numbers change.
-        let widths: [CGFloat] = columns.map {
-            switch $0 {
+        func columnWidth(_ col: StatusColumn) -> CGFloat {
+            switch col {
             case .metric(let c, let v): max(width(c, caption), width(v, value), width("100%", value))
             case .stacked(let a, let b): max(width(a, small), width(b, small), width("↑999K", small))
+            case .icon(let name): ceil(symbol(name)?.size.width ?? 12)
             }
         }
-        let total = widths.reduce(0, +) + spacing * CGFloat(max(columns.count - 1, 0)) + padding * 2
-        let image = NSImage(size: NSSize(width: total, height: height), flipped: false) { _ in
-            if pill {
-                NSColor.black.withAlphaComponent(0.16).setFill()
-                NSBezierPath(roundedRect: NSRect(x: 0, y: 1.5, width: total, height: height - 3), xRadius: 6, yRadius: 6).fill()
-            }
-            var x = padding
-            for (col, w) in zip(columns, widths) {
-                func draw(_ s: String, _ f: NSFont, y: CGFloat) {
-                    let sw = width(s, f)
-                    (s as NSString).draw(at: NSPoint(x: x + (w - sw) / 2, y: y), withAttributes: attrs(f))
+        func gap(after col: StatusColumn) -> CGFloat {
+            if case .icon = col { return iconSpacing }
+            return spacing
+        }
+        let layouts: [(columns: [StatusColumn], widths: [CGFloat], width: CGFloat)] = groups.map { columns in
+            let widths = columns.map(columnWidth)
+            let gaps = columns.dropLast().map(gap(after:)).reduce(0, +)
+            return (columns, widths, widths.reduce(0, +) + gaps + padding * 2)
+        }
+        let total = layouts.map(\.width).reduce(0, +) + groupGap * CGFloat(max(layouts.count - 1, 0))
+
+        let image = NSImage(size: NSSize(width: max(total, 1), height: height), flipped: false) { _ in
+            var groupX: CGFloat = 0
+            for layout in layouts {
+                if pill {
+                    NSColor.black.withAlphaComponent(0.16).setFill()
+                    NSBezierPath(roundedRect: NSRect(x: groupX, y: 1.5, width: layout.width, height: height - 3),
+                                 xRadius: 6, yRadius: 6).fill()
                 }
-                switch col {
-                case .metric(let c, let v):
-                    draw(c, caption, y: 11.5)
-                    draw(v, value, y: 0.5)
-                case .stacked(let a, let b):
-                    draw(a, small, y: 10.5)
-                    draw(b, small, y: 0.5)
+                var x = groupX + padding
+                for (col, w) in zip(layout.columns, layout.widths) {
+                    func draw(_ s: String, _ f: NSFont, y: CGFloat) {
+                        let sw = width(s, f)
+                        (s as NSString).draw(at: NSPoint(x: x + (w - sw) / 2, y: y), withAttributes: attrs(f))
+                    }
+                    switch col {
+                    case .metric(let c, let v):
+                        draw(c, caption, y: 11.5)
+                        draw(v, value, y: 0.5)
+                    case .stacked(let a, let b):
+                        draw(a, small, y: 10.5)
+                        draw(b, small, y: 0.5)
+                    case .icon(let name):
+                        if let img = symbol(name) {
+                            let size = img.size
+                            img.draw(in: NSRect(x: x + (w - size.width) / 2, y: (height - size.height) / 2,
+                                                width: size.width, height: size.height))
+                        }
+                    }
+                    x += w + gap(after: col)
                 }
-                x += w + spacing
+                groupX += layout.width + groupGap
             }
             return true
         }

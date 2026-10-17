@@ -9,7 +9,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.menuTemp) private var menuTemp = false
     @AppStorage(Prefs.menuDisk) private var menuDisk = false
     @AppStorage(Prefs.menuUsage) private var menuUsage = true
-    @AppStorage(Prefs.pinnedProvider) private var pinned = ProviderID.claude.rawValue
+    @AppStorage(Prefs.pinnedProviders) private var pinnedRaw = ""
     @AppStorage(Prefs.usageMode) private var mode = "used"
     @AppStorage(Prefs.usageInterval) private var interval = 5
     @AppStorage(Prefs.showAccount) private var showAccount = true
@@ -32,8 +32,19 @@ struct SettingsView: View {
                 Toggle(L.t("Claude (Claude Code 로그인)", "Claude (Claude Code login)"), isOn: $claudeOn)
                 Toggle(L.t("ChatGPT (Codex 로그인)", "ChatGPT (Codex login)"), isOn: $codexOn)
                 Toggle("Gemini (Antigravity CLI)", isOn: $geminiOn)
-                Picker(L.t("배지에 표시할 서비스", "Service shown in badge"), selection: $pinned) {
-                    ForEach(ProviderID.allCases) { Text($0.displayName).tag($0.rawValue) }
+                HStack {
+                    Text(L.t("배지에 표시할 서비스", "Services in badge"))
+                    Spacer()
+                    HStack(spacing: 10) {
+                        ForEach(ProviderID.allCases) { id in
+                            Toggle(id.displayName, isOn: Binding(
+                                get: { Prefs.pinned(from: pinnedRaw).contains(id) },
+                                set: { _ in Prefs.togglePinned(id) }
+                            ))
+                            .toggleStyle(.checkbox)
+                            .accessibilityLabel(id.displayName)
+                        }
+                    }
                 }
                 Picker(L.t("표시 방식", "Display"), selection: $mode) {
                     Text(L.t("사용량", "Used")).tag("used")
@@ -64,7 +75,7 @@ struct SettingsView: View {
         .id(language)
         .onChange(of: [menuCPU, menuMemory, menuNetwork, menuTemp, menuDisk, menuUsage]) { model.onTick?() }
         .onChange(of: [claudeOn, codexOn, geminiOn]) { model.refreshUsage(force: false) }
-        .onChange(of: pinned) { model.onTick?() }
+        .onChange(of: pinnedRaw) { model.onTick?() }
         .onChange(of: mode) { model.onTick?() }
         .onChange(of: language) { model.onTick?() }
     }

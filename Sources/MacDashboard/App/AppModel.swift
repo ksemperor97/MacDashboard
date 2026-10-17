@@ -10,7 +10,8 @@ enum Prefs {
     static let menuTemp = "menu.temp"
     static let menuDisk = "menu.disk"
     static let menuUsage = "menu.usage"
-    static let pinnedProvider = "usage.pinned"
+    static let pinnedProvider = "usage.pinned"            // legacy single pin (≤ 1.1.0)
+    static let pinnedProviders = "usage.pinnedProviders"  // comma-separated ProviderID list
     static let usageMode = "usage.mode"          // "used" | "remaining"
     static let usageInterval = "usage.interval"  // minutes
     static let showAccount = "usage.showAccount"
@@ -30,7 +31,27 @@ enum Prefs {
 
     static var d: UserDefaults { .standard }
     static var showRemaining: Bool { d.string(forKey: usageMode) == "remaining" }
-    static var pinned: ProviderID { ProviderID(rawValue: d.string(forKey: pinnedProvider) ?? "") ?? .claude }
+    /// Services shown in the menu bar badge, in display order. Falls back to the single pin
+    /// stored by 1.1.0 and earlier.
+    static func pinned(from raw: String?) -> [ProviderID] {
+        let ids = Set((raw ?? "").split(separator: ",").compactMap { ProviderID(rawValue: String($0)) })
+        if !ids.isEmpty { return ProviderID.allCases.filter(ids.contains) }
+        return [ProviderID(rawValue: d.string(forKey: pinnedProvider) ?? "") ?? .claude]
+    }
+
+    static var pinned: [ProviderID] { pinned(from: d.string(forKey: pinnedProviders)) }
+
+    /// Adds or removes a service from the badge; the last pinned service stays pinned.
+    static func togglePinned(_ id: ProviderID) {
+        var ids = Set(pinned)
+        if ids.contains(id) {
+            guard ids.count > 1 else { return }
+            ids.remove(id)
+        } else {
+            ids.insert(id)
+        }
+        d.set(ProviderID.allCases.filter(ids.contains).map(\.rawValue).joined(separator: ","), forKey: pinnedProviders)
+    }
     static func isEnabled(_ id: ProviderID) -> Bool { d.bool(forKey: enabled(id)) }
 }
 

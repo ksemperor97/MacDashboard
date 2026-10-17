@@ -4,7 +4,7 @@ import SwiftUI
 struct UsageView: View {
     @Environment(AppModel.self) private var model
     @AppStorage(Prefs.usageMode) private var mode = "used"
-    @AppStorage(Prefs.pinnedProvider) private var pinned = ProviderID.claude.rawValue
+    @AppStorage(Prefs.pinnedProviders) private var pinnedRaw = ""
     @AppStorage(Prefs.showAccount) private var showAccount = true
     @AppStorage(Prefs.language) private var language = AppLanguage.system.rawValue
     let openSettings: () -> Void
@@ -23,7 +23,7 @@ struct UsageView: View {
                     ForEach(model.enabledProviders) { id in
                         ProviderCard(id: id, state: model.usage[id] ?? UsageState(), now: context.date,
                                      remaining: mode == "remaining", showAccount: showAccount,
-                                     pinned: pinned == id.rawValue) { pinned = id.rawValue }
+                                     pinned: Prefs.pinned(from: pinnedRaw).contains(id)) { Prefs.togglePinned(id) }
                     }
                 }
             }
@@ -38,7 +38,7 @@ struct UsageView: View {
         .frame(width: 400)
         .id(language)
         .onChange(of: mode) { model.onTick?() }
-        .onChange(of: pinned) { model.onTick?() }
+        .onChange(of: pinnedRaw) { model.onTick?() }
     }
 
     private var header: some View {
@@ -104,7 +104,7 @@ private struct ProviderCard: View {
                         .foregroundStyle(pinned ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
                 }
                 .buttonStyle(.plain)
-                .help(L.t("메뉴 막대에 고정", "Pin to menu bar"))
+                .help(L.t("메뉴 막대 배지에 표시/해제", "Show in menu bar badge"))
             }
 
             if let usage = state.usage {
@@ -169,17 +169,9 @@ struct ProviderIcon: View {
     }
 
     var body: some View {
-        Image(systemName: symbol)
+        Image(systemName: id.symbol)
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(Self.color(id))
             .frame(width: 18)
-    }
-
-    private var symbol: String {
-        switch id {
-        case .claude: "asterisk"
-        case .codex: "circle.hexagongrid"
-        case .gemini: "sparkle"
-        }
     }
 }
