@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SystemDashboardView: View {
     @Environment(AppModel.self) private var model
+    @AppStorage(Prefs.showIP) private var showIP = true
     let openSettings: () -> Void
 
     var body: some View {
@@ -159,7 +160,7 @@ struct SystemDashboardView: View {
                 Label(Format.rate(n.upRate), systemImage: "arrow.up").foregroundStyle(Palette.up)
             }
             .font(.system(size: 13, weight: .semibold).monospacedDigit())
-            Text(n.ipv4 ?? "연결 안 됨")
+            Text(n.ipv4 == nil ? "연결 안 됨" : (showIP ? n.ipv4! : "IP 숨김"))
                 .font(.system(size: 11).monospacedDigit())
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)

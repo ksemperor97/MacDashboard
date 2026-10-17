@@ -14,12 +14,13 @@ enum Prefs {
     static let usageMode = "usage.mode"          // "used" | "remaining"
     static let usageInterval = "usage.interval"  // minutes
     static let showAccount = "usage.showAccount"
+    static let showIP = "network.showIP"
     static func enabled(_ id: ProviderID) -> String { "usage.enabled.\(id.rawValue)" }
 
     static func register() {
         var defaults: [String: Any] = [
             menuCPU: true, menuMemory: true, menuNetwork: true, menuTemp: false, menuDisk: false, menuUsage: true,
-            pinnedProvider: ProviderID.claude.rawValue, usageMode: "used", usageInterval: 5, showAccount: true,
+            pinnedProvider: ProviderID.claude.rawValue, usageMode: "used", usageInterval: 5, showAccount: true, showIP: true,
         ]
         for id in ProviderID.allCases { defaults[enabled(id)] = true }
         UserDefaults.standard.register(defaults: defaults)

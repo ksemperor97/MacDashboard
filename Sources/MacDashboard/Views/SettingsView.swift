@@ -12,6 +12,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.usageMode) private var mode = "used"
     @AppStorage(Prefs.usageInterval) private var interval = 5
     @AppStorage(Prefs.showAccount) private var showAccount = true
+    @AppStorage(Prefs.showIP) private var showIP = true
     @AppStorage(Prefs.enabled(.claude)) private var claudeOn = true
     @AppStorage(Prefs.enabled(.codex)) private var codexOn = true
     @AppStorage(Prefs.enabled(.gemini)) private var geminiOn = true
@@ -43,6 +44,7 @@ struct SettingsView: View {
                 Toggle("계정 이메일 표시", isOn: $showAccount)
             }
             Section("일반") {
+                Toggle("IP 주소 표시", isOn: $showIP)
                 Toggle("로그인 시 자동 실행", isOn: Binding(
                     get: { model.launchAtLogin },
                     set: { model.setLaunchAtLogin($0) }

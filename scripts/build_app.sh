@@ -1,6 +1,8 @@
 #!/bin/zsh
 # Builds build/MacDashboard.app (release, ad-hoc signed).
-# Usage: scripts/build_app.sh [--install]   (--install copies the app to /Applications)
+# Usage: scripts/build_app.sh [--install | --zip]
+#   --install  copies the app to /Applications
+#   --zip      writes build/MacDashboard-<version>.zip for a GitHub release (ditto keeps the signature)
 set -euo pipefail
 
 ROOT="${0:A:h:h}"
@@ -15,6 +17,14 @@ cp "$(swift build -c release --arch arm64 --show-bin-path)/MacDashboard" "$APP/C
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 codesign --force --sign - --identifier com.sjk.MacDashboard "$APP"
 echo "Built $APP"
+
+if [[ "${1:-}" == "--zip" ]]; then
+    VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/Resources/Info.plist")
+    ZIP="$ROOT/build/MacDashboard-$VERSION.zip"
+    rm -f "$ZIP"
+    ditto -c -k --keepParent "$APP" "$ZIP"
+    echo "Packaged $ZIP"
+fi
 
 if [[ "${1:-}" == "--install" ]]; then
     DEST="/Applications/MacDashboard.app"
