@@ -196,11 +196,17 @@ final class SystemSampler {
         let (read, write) = blockStorageBytes()
         if let prev = prevDisk, now > prev.time {
             let dt = now - prev.time
-            sample.readRate = Double(read &- prev.read) / dt
-            sample.writeRate = Double(write &- prev.write) / dt
+            sample.readRate = counterDelta(read, prev.read) / dt
+            sample.writeRate = counterDelta(write, prev.write) / dt
         }
         prevDisk = (read, write, now)
         return sample
+    }
+
+    /// Byte counters only grow; a smaller value means the counter was reset (interface reconnected,
+    /// drive ejected), so that interval counts as 0 instead of wrapping to a huge number.
+    private func counterDelta(_ current: UInt64, _ previous: UInt64) -> Double {
+        current >= previous ? Double(current - previous) : 0
     }
 
     /// Invalidates the cached volume size so the next sample re-reads it.
@@ -245,8 +251,8 @@ final class SystemSampler {
 
         if let prev = prevNet, prev.name == name, now > prev.time {
             let dt = now - prev.time
-            sample.downRate = Double(counters.rx &- prev.rx) / dt
-            sample.upRate = Double(counters.tx &- prev.tx) / dt
+            sample.downRate = counterDelta(counters.rx, prev.rx) / dt
+            sample.upRate = counterDelta(counters.tx, prev.tx) / dt
         }
         prevNet = (name, counters.rx, counters.tx, now)
         return sample
