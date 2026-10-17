@@ -80,7 +80,7 @@ open build/MacDashboard.app --args --open system|usage|settings     # open a pan
 
 ### 설치 (Release)
 1. [Releases](https://github.com/ksemperor97/MacDashboard/releases)에서 `MacDashboard-<버전>.zip`을 받아 압축을 풀고 `MacDashboard.app`을 `/Applications`로 옮겨요.
-2. 이 앱은 Apple 공증을 받지 않은 ad-hoc 서명이라 처음 열 때 macOS가 막아요. 한 번 열기를 시도한 뒤 **시스템 설정 → 개인정보 보호 및 보안 → "그래도 열기"**를 누르세요. 터미널에서는 이 명령으로도 돼요.
+2. 이 앱은 Apple 공증을 받지 않은 ad-hoc 서명이라 처음 열 때 macOS가 막아요. 한 번 열기를 시도한 뒤 **시스템 설정 → 개인정보 보호 및 보안 → "그래도 열기"** 버튼을 누르세요. 터미널에서는 이 명령으로도 돼요.
    ```bash
    xattr -dr com.apple.quarantine /Applications/MacDashboard.app
    ```
