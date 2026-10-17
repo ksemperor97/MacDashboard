@@ -13,15 +13,6 @@ enum ProviderID: String, CaseIterable, Identifiable, Codable {
         }
     }
 
-    /// SF Symbol used in the popover and the menu bar badge.
-    var symbol: String {
-        switch self {
-        case .claude: "asterisk"
-        case .codex: "circle.hexagongrid"
-        case .gemini: "sparkle"
-        }
-    }
-
     var sourceName: String {
         switch self {
         case .claude: "Claude Code"

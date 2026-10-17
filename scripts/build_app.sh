@@ -15,6 +15,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$(swift build -c release --arch arm64 --show-bin-path)/MacDashboard" "$APP/Contents/MacOS/MacDashboard"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
+cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 codesign --force --sign - --identifier com.sjk.MacDashboard "$APP"
 echo "Built $APP"
 

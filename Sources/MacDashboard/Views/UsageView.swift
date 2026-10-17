@@ -169,9 +169,7 @@ struct ProviderIcon: View {
     }
 
     var body: some View {
-        Image(systemName: id.symbol)
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(Self.color(id))
+        ProviderMark(id: id, size: 15)
             .frame(width: 18)
     }
 }

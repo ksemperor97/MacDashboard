@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 if CommandLine.arguments.contains("--probe-sensors") {
     let keys = Sensors.allKeys()
@@ -52,6 +53,25 @@ if CommandLine.arguments.contains("--dump-usage") {
         done.signal()
     }
     done.wait()
+    exit(0)
+}
+
+if let i = CommandLine.arguments.firstIndex(of: "--render-logos"), i + 1 < CommandLine.arguments.count {
+    // Writes a PNG with each service mark large and at menu bar size, for checking the shapes.
+    MainActor.assumeIsolated {
+        let sheet = VStack(spacing: 24) {
+            HStack(spacing: 40) { ForEach(ProviderID.allCases) { ProviderMark(id: $0, size: 160) } }
+            HStack(spacing: 40) { ForEach(ProviderID.allCases) { ProviderMark(id: $0, size: 16) } }
+        }
+        .padding(30)
+        .background(.white)
+        let renderer = ImageRenderer(content: sheet)
+        renderer.scale = 2
+        if let image = renderer.nsImage, let tiff = image.tiffRepresentation,
+           let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+            try? png.write(to: URL(fileURLWithPath: CommandLine.arguments[i + 1]))
+        }
+    }
     exit(0)
 }
 

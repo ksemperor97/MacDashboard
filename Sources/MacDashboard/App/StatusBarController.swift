@@ -11,6 +11,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private let usagePopover = NSPopover()
     private var lastSystemKey = ""
     private var lastUsageKey = ""
+    private var appearanceObservation: NSKeyValueObservation?
     var openSettings: (() -> Void)?
 
     init(model: AppModel) {
@@ -32,6 +33,13 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             item.button?.target = self
             item.button?.action = action
             item.button?.imagePosition = .imageOnly
+        }
+        // Colored badges draw their own text color, so redraw when the menu bar turns light/dark.
+        appearanceObservation = usageItem.button?.observe(\.effectiveAppearance) { [weak self] _, _ in
+            DispatchQueue.main.async {
+                self?.lastUsageKey = ""
+                self?.update()
+            }
         }
         update()
     }
@@ -59,8 +67,12 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
     private func toggle(_ popover: NSPopover, from item: NSStatusItem) {
         if popover.isShown {
-            popover.performClose(nil)
-            return
+            // A popover that reports shown but has no visible window is reopened instead of "closed".
+            guard popover.contentViewController?.view.window?.isVisible != true else {
+                popover.performClose(nil)
+                return
+            }
+            popover.close()
         }
         [systemPopover, usagePopover].filter { $0 !== popover && $0.isShown }.forEach { $0.performClose(nil) }
         guard let button = item.button else { return }
@@ -128,7 +140,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         // With several services each gets its own pill, led by its icon so they can be told apart.
         let showIcons = pinned.count > 1
         let groups: [[StatusColumn]] = pinned.map { id in
-            var columns: [StatusColumn] = showIcons ? [.icon(id.symbol)] : []
+            var columns: [StatusColumn] = showIcons ? [.logo(id)] : []
             let windows = model.usage[id]?.usage?.badgeWindows ?? []
             for w in windows {
                 let used = w.effectiveUsed()
@@ -139,59 +151,68 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             }
             return columns
         }
-        let key = groups.map { $0.map(\.key).joined(separator: "|") }.joined(separator: "#")
+        // Several services: keep the icons in color, with text matching the menu bar's appearance.
+        let tint = showIcons ? menuBarTextColor(for: usageItem.button) : nil
+        let key = groups.map { $0.map(\.key).joined(separator: "|") }.joined(separator: "#") + "\(tint?.description ?? "")"
         guard key != lastUsageKey else { return }
         lastUsageKey = key
         usageItem.button?.image = groups.isEmpty
             ? StatusImage.render([[.metric("AI", "–")]], pill: true)
-            : StatusImage.render(groups, pill: true)
+            : StatusImage.render(groups, pill: true, tint: tint)
+    }
+
+    private func menuBarTextColor(for button: NSStatusBarButton?) -> NSColor {
+        var color = NSColor.black
+        (button?.effectiveAppearance ?? NSApp.effectiveAppearance).performAsCurrentDrawingAppearance {
+            color = NSColor.labelColor.usingColorSpace(.sRGB) ?? .black
+        }
+        return color
     }
 }
 
 enum StatusColumn {
     case metric(String, String)      // small caption over a bold value
     case stacked(String, String)     // two equal small lines (network rates)
-    case icon(String)                // SF Symbol identifying a service
+    case logo(ProviderID)            // service icon identifying a badge group
 
     var key: String {
         switch self {
         case .metric(let a, let b): "m\(a)\(b)"
         case .stacked(let a, let b): "s\(a)\(b)"
-        case .icon(let name): "i\(name)"
+        case .logo(let id): "l\(id.rawValue)"
         }
     }
 }
 
-/// Draws status item contents as a template image so it follows the menu bar's light/dark tint.
+/// Draws status item contents. Without `tint` it is a template image that follows the menu bar's
+/// light/dark tint; with `tint` text uses that color and service icons keep their own colors.
 /// Each group is drawn side by side; with `pill` every group gets its own rounded background.
 enum StatusImage {
-    static func render(_ groups: [[StatusColumn]], pill: Bool) -> NSImage {
+    static func render(_ groups: [[StatusColumn]], pill: Bool, tint: NSColor? = nil) -> NSImage {
+        let ink = tint ?? .black
         let caption = NSFont.systemFont(ofSize: 8, weight: .semibold)
         let value = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
         let small = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
-        let symbolConfig = NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
+        let logoSize: CGFloat = 14
         let spacing: CGFloat = 8
         let iconSpacing: CGFloat = 5
         let groupGap: CGFloat = 4
         let padding: CGFloat = pill ? 7 : 1
         let height: CGFloat = 22
 
-        func attrs(_ font: NSFont) -> [NSAttributedString.Key: Any] { [.font: font, .foregroundColor: NSColor.black] }
+        func attrs(_ font: NSFont) -> [NSAttributedString.Key: Any] { [.font: font, .foregroundColor: ink] }
         func width(_ s: String, _ f: NSFont) -> CGFloat { ceil((s as NSString).size(withAttributes: attrs(f)).width) }
-        func symbol(_ name: String) -> NSImage? {
-            NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(symbolConfig)
-        }
 
         // Fixed minimum widths keep the item from jittering as numbers change.
         func columnWidth(_ col: StatusColumn) -> CGFloat {
             switch col {
             case .metric(let c, let v): max(width(c, caption), width(v, value), width("100%", value))
             case .stacked(let a, let b): max(width(a, small), width(b, small), width("↑999K", small))
-            case .icon(let name): ceil(symbol(name)?.size.width ?? 12)
+            case .logo: logoSize
             }
         }
         func gap(after col: StatusColumn) -> CGFloat {
-            if case .icon = col { return iconSpacing }
+            if case .logo = col { return iconSpacing }
             return spacing
         }
         let layouts: [(columns: [StatusColumn], widths: [CGFloat], width: CGFloat)] = groups.map { columns in
@@ -205,7 +226,7 @@ enum StatusImage {
             var groupX: CGFloat = 0
             for layout in layouts {
                 if pill {
-                    NSColor.black.withAlphaComponent(0.16).setFill()
+                    ink.withAlphaComponent(0.16).setFill()
                     NSBezierPath(roundedRect: NSRect(x: groupX, y: 1.5, width: layout.width, height: height - 3),
                                  xRadius: 6, yRadius: 6).fill()
                 }
@@ -222,11 +243,15 @@ enum StatusImage {
                     case .stacked(let a, let b):
                         draw(a, small, y: 10.5)
                         draw(b, small, y: 0.5)
-                    case .icon(let name):
-                        if let img = symbol(name) {
-                            let size = img.size
-                            img.draw(in: NSRect(x: x + (w - size.width) / 2, y: (height - size.height) / 2,
-                                                width: size.width, height: size.height))
+                    case .logo(let id):
+                        // Logos are defined y-down; flip into the image's y-up space.
+                        if let ctx = NSGraphicsContext.current?.cgContext {
+                            ctx.saveGState()
+                            ctx.translateBy(x: x, y: (height + logoSize) / 2)
+                            ctx.scaleBy(x: 1, y: -1)
+                            ProviderLogo.draw(id, in: ctx, rect: CGRect(x: 0, y: 0, width: logoSize, height: logoSize),
+                                              colored: tint != nil, ink: ink.cgColor)
+                            ctx.restoreGState()
                         }
                     }
                     x += w + gap(after: col)
@@ -235,7 +260,7 @@ enum StatusImage {
             }
             return true
         }
-        image.isTemplate = true
+        image.isTemplate = tint == nil
         return image
     }
 }
