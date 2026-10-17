@@ -23,7 +23,7 @@ if CommandLine.arguments.contains("--dump-system") {
         print("GPU \(Format.percent(s.gpu.device)) renderer \(Format.percent(s.gpu.renderer)) tiler \(Format.percent(s.gpu.tiler)) temp \(Format.temperature(t.gpuTemp))")
         print("MEM used \(Format.memory(s.memory.used)) / \(Format.memory(s.memory.total)) (\(Format.percent(s.memory.usedFraction))) app \(Format.memory(s.memory.app)) wired \(Format.memory(s.memory.wired)) comp \(Format.memory(s.memory.compressed)) swap \(Format.memory(s.memory.swapUsed)) pressure \(s.memory.pressure.label)")
         print("DISK used \(Format.bytes(s.disk.used, decimals: 2)) avail \(Format.bytes(s.disk.available, decimals: 2)) total \(Format.bytes(s.disk.total, decimals: 2)) r \(Format.rate(s.disk.readRate)) w \(Format.rate(s.disk.writeRate))")
-        print("NET \(s.network.interface ?? "-") \(s.network.kind) vpn=\(s.network.vpnActive) \(s.network.ipv4 ?? "-") down \(Format.rate(s.network.downRate)) up \(Format.rate(s.network.upRate))")
+        print("NET \(s.network.interface ?? "-") \(s.network.kind.label) vpn=\(s.network.vpnActive) \(s.network.ipv4 ?? "-") down \(Format.rate(s.network.downRate)) up \(Format.rate(s.network.upRate))")
         for v in ExternalVolumes.scan() {
             print("EXT \(v.name) [\(v.detail)] used \(Format.bytes(v.used, decimals: 2)) avail \(Format.bytes(v.available, decimals: 2)) total \(Format.bytes(v.total, decimals: 2)) (\(Format.percent(v.usedFraction)))")
         }
@@ -41,9 +41,9 @@ if CommandLine.arguments.contains("--dump-usage") {
             let start = Date()
             do {
                 let u = try await p.fetch()
-                print("[\(p.id.displayName)] plan=\(u.plan ?? "-") account=\(u.account != nil ? "yes" : "no") note=\(u.note ?? "-") (\(String(format: "%.1f", Date().timeIntervalSince(start)))s)")
+                print("[\(p.id.displayName)] plan=\(u.plan ?? "-") account=\(u.account != nil ? "yes" : "no") note=\(u.note?.text ?? "-") (\(String(format: "%.1f", Date().timeIntervalSince(start)))s)")
                 for w in u.windows {
-                    print("   \(w.label) [\(w.kind.short ?? "-")] used \(Format.percent(w.effectiveUsed())) · \(Format.resetText(w.resetsAt))\(w.isVisible() ? "" : " (숨김)")")
+                    print("   \(w.label.text) [\(w.kind.short ?? "-")] used \(Format.percent(w.effectiveUsed())) · \(Format.resetText(w.resetsAt))\(w.isVisible() ? "" : " (숨김)")")
                 }
             } catch {
                 print("[\(p.id.displayName)] ERROR \(error.localizedDescription)")

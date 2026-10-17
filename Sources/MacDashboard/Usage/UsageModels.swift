@@ -42,21 +42,24 @@ enum WindowKind {
         }
     }
 
-    static func label(minutes: Int) -> String {
+    static let fiveHourLabel = Loc("5시간", "5 hours")
+    static let weeklyLabel = Loc("주간", "Weekly")
+
+    static func label(minutes: Int) -> Loc {
         switch from(minutes: minutes) {
-        case .fiveHour: return "5시간"
-        case .weekly: return "주간"
+        case .fiveHour: return fiveHourLabel
+        case .weekly: return weeklyLabel
         case .other:
-            if minutes % 1440 == 0 { return "\(minutes / 1440)일" }
-            if minutes % 60 == 0 { return "\(minutes / 60)시간" }
-            return "\(minutes)분"
+            if minutes % 1440 == 0 { return Loc("\(minutes / 1440)일", "\(minutes / 1440) days") }
+            if minutes % 60 == 0 { return Loc("\(minutes / 60)시간", "\(minutes / 60) hours") }
+            return Loc("\(minutes)분", "\(minutes) min")
         }
     }
 }
 
 struct UsageWindow: Identifiable {
     let id: String
-    let label: String
+    let label: Loc
     let kind: WindowKind
     let usedFraction: Double   // 0...1 as reported
     let resetsAt: Date?
@@ -81,7 +84,7 @@ struct ProviderUsage {
     var plan: String?
     var windows: [UsageWindow]
     var updatedAt: Date
-    var note: String?   // e.g. "로컬 세션 기록 기준"
+    var note: Loc?   // e.g. "based on local session log"
 
     /// Windows shown in the menu bar badge (first 5-hour and first weekly window).
     var badgeWindows: [UsageWindow] {
@@ -91,7 +94,7 @@ struct ProviderUsage {
 
 struct UsageState {
     var usage: ProviderUsage?
-    var error: String?
+    var error: Error?
     var loading = false
     var lastAttempt: Date?
 }
@@ -102,17 +105,17 @@ protocol UsageProvider {
 }
 
 enum UsageError: LocalizedError {
-    case notLoggedIn(String)
-    case tokenExpired(String)
+    case notLoggedIn(Loc)
+    case tokenExpired(Loc)
     case http(Int)
     case badResponse
 
     var errorDescription: String? {
         switch self {
-        case .notLoggedIn(let hint): "로그인 정보 없음 · \(hint)"
-        case .tokenExpired(let hint): "토큰 만료 · \(hint)"
-        case .http(let code): "서버 응답 오류 (HTTP \(code))"
-        case .badResponse: "응답 형식을 해석할 수 없어요"
+        case .notLoggedIn(let hint): L.t("로그인 정보 없음", "Not signed in") + " · " + hint.text
+        case .tokenExpired(let hint): L.t("토큰 만료", "Token expired") + " · " + hint.text
+        case .http(let code): L.t("서버 응답 오류", "Server error") + " (HTTP \(code))"
+        case .badResponse: L.t("응답 형식을 해석할 수 없어요", "Unexpected response format")
         }
     }
 }

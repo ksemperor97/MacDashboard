@@ -15,12 +15,14 @@ enum Prefs {
     static let usageInterval = "usage.interval"  // minutes
     static let showAccount = "usage.showAccount"
     static let showIP = "network.showIP"
+    static let language = "app.language"         // AppLanguage raw value
     static func enabled(_ id: ProviderID) -> String { "usage.enabled.\(id.rawValue)" }
 
     static func register() {
         var defaults: [String: Any] = [
             menuCPU: true, menuMemory: true, menuNetwork: true, menuTemp: false, menuDisk: false, menuUsage: true,
             pinnedProvider: ProviderID.claude.rawValue, usageMode: "used", usageInterval: 5, showAccount: true, showIP: true,
+            language: AppLanguage.system.rawValue,
         ]
         for id in ProviderID.allCases { defaults[enabled(id)] = true }
         UserDefaults.standard.register(defaults: defaults)
@@ -169,7 +171,7 @@ final class AppModel {
                         s.usage = u
                         s.error = nil
                     case .failure(let e):
-                        s.error = e.localizedDescription
+                        s.error = e
                     }
                     self.usage[id] = s
                     self.onTick?()
@@ -194,7 +196,7 @@ final class AppModel {
             if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
             loginError = nil
         } catch {
-            loginError = "설정 실패: \(error.localizedDescription)"
+            loginError = L.t("설정 실패: ", "Failed: ") + error.localizedDescription
         }
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }

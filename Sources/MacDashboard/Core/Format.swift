@@ -50,29 +50,37 @@ enum Format {
         return "\(Int(v.rounded()))\(units[i])"
     }
 
-    /// "4시간 28분", "2일 3시간", "12분"
+    /// "4시간 28분" / "4h 28m", "2일 3시간" / "2d 3h", "12분" / "12m"
     static func duration(_ seconds: TimeInterval) -> String {
         let total = max(Int(seconds), 0)
         let days = total / 86400
         let hours = (total % 86400) / 3600
         let minutes = (total % 3600) / 60
-        if days > 0 { return "\(days)일 \(hours)시간" }
-        if hours > 0 { return minutes > 0 ? "\(hours)시간 \(minutes)분" : "\(hours)시간" }
-        return "\(max(minutes, 1))분"
+        if days > 0 { return L.t("\(days)일 \(hours)시간", "\(days)d \(hours)h") }
+        if hours > 0 {
+            return minutes > 0 ? L.t("\(hours)시간 \(minutes)분", "\(hours)h \(minutes)m") : L.t("\(hours)시간", "\(hours)h")
+        }
+        return L.t("\(max(minutes, 1))분", "\(max(minutes, 1))m")
     }
 
     static func resetText(_ date: Date?, now: Date = Date()) -> String {
-        guard let date else { return "초기화 시각 정보 없음" }
+        guard let date else { return L.t("초기화 시각 정보 없음", "No reset time") }
         let remaining = date.timeIntervalSince(now)
-        if remaining <= 0 { return "초기화됨" }
-        if remaining < 60 { return "곧 초기화" }
-        return "\(duration(remaining)) 후 초기화"
+        if remaining <= 0 { return L.t("초기화됨", "Reset") }
+        if remaining < 60 { return L.t("곧 초기화", "Resets soon") }
+        return L.t("\(duration(remaining)) 후 초기화", "Resets in \(duration(remaining))")
+    }
+
+    /// "1.02 TB 사용 · 3.98 TB 남음 / 5.00 TB" / "1.02 TB used · 3.98 TB free / 5.00 TB"
+    static func capacity(used: Int64, available: Int64, total: Int64) -> String {
+        let u = bytes(used, decimals: 2), a = bytes(available, decimals: 2), t = bytes(total, decimals: 2)
+        return L.t("\(u) 사용 · \(a) 남음 / \(t)", "\(u) used · \(a) free / \(t)")
     }
 
     static func clock(_ date: Date) -> String {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "ko_KR")
-        f.dateFormat = "a h:mm"
+        f.locale = Locale(identifier: L.isKorean ? "ko_KR" : "en_US")
+        f.dateFormat = L.isKorean ? "a h:mm" : "h:mm a"
         return f.string(from: date)
     }
 

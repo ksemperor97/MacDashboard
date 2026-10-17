@@ -14,6 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusBar = controller
         model.onTick = { [weak controller] in controller?.update() }
         model.start()
+        NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateSettingsTitle() }
+        }
 
         // `--open system|usage|settings` opens a panel right after launch (handy when checking the UI).
         let args = CommandLine.arguments
@@ -25,17 +28,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func updateSettingsTitle() {
+        let title = L.t("MacDashboard 설정", "MacDashboard Settings")
+        if settingsWindow?.title != title { settingsWindow?.title = title }
+    }
+
     private func showSettings() {
         if settingsWindow == nil {
             let host = NSHostingController(rootView: SettingsView().environment(model))
             host.sizingOptions = .preferredContentSize
             let window = NSWindow(contentViewController: host)
-            window.title = "MacDashboard 설정"
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
             window.center()
             settingsWindow = window
         }
+        updateSettingsTitle()
         NSApp.activate()
         settingsWindow?.makeKeyAndOrderFront(nil)
     }

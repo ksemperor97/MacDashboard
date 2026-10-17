@@ -4,6 +4,7 @@ import SwiftUI
 struct SystemDashboardView: View {
     @Environment(AppModel.self) private var model
     @AppStorage(Prefs.showIP) private var showIP = true
+    @AppStorage(Prefs.language) private var language = AppLanguage.system.rawValue
     let openSettings: () -> Void
 
     var body: some View {
@@ -25,6 +26,7 @@ struct SystemDashboardView: View {
         }
         .padding(14)
         .frame(width: 460)
+        .id(language)
     }
 
     private var s: SystemSnapshot { model.snapshot }
@@ -35,7 +37,7 @@ struct SystemDashboardView: View {
             Text("MacDashboard").font(.system(size: 15, weight: .bold))
             Spacer()
             if let boot = s.bootTime {
-                Text("가동 \(Format.duration(Date().timeIntervalSince(boot)))")
+                Text(L.t("가동 ", "Up ") + Format.duration(Date().timeIntervalSince(boot)))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
@@ -56,8 +58,8 @@ struct SystemDashboardView: View {
             .frame(height: 44)
             CoreBars(cores: s.cpu.cores)
             HStack(spacing: 10) {
-                LegendItem(color: Palette.user, label: "사용자", value: Format.percent(s.cpu.user))
-                LegendItem(color: Palette.system, label: "시스템", value: Format.percent(s.cpu.system))
+                LegendItem(color: Palette.user, label: L.t("사용자", "User"), value: Format.percent(s.cpu.user))
+                LegendItem(color: Palette.system, label: L.t("시스템", "System"), value: Format.percent(s.cpu.system))
             }
         }
     }
@@ -73,8 +75,8 @@ struct SystemDashboardView: View {
             ProgressBar(fraction: s.gpu.device, color: Palette.renderer, height: 5)
                 .padding(.vertical, 4.5)
             HStack(spacing: 10) {
-                LegendItem(color: Palette.renderer, label: "렌더러", value: Format.percent(s.gpu.renderer))
-                LegendItem(color: Palette.tiler, label: "타일러", value: Format.percent(s.gpu.tiler))
+                LegendItem(color: Palette.renderer, label: L.t("렌더러", "Renderer"), value: Format.percent(s.gpu.renderer))
+                LegendItem(color: Palette.tiler, label: L.t("타일러", "Tiler"), value: Format.percent(s.gpu.tiler))
             }
         }
     }
@@ -83,7 +85,7 @@ struct SystemDashboardView: View {
         let m = s.memory
         let total = Double(max(m.total, 1))
         return Card {
-            CardHeader(icon: "memorychip", title: "메모리") {
+            CardHeader(icon: "memorychip", title: L.t("메모리", "Memory")) {
                 Text("\(Format.memory(m.used)) / \(Format.memory(m.total))")
                     .font(.system(size: 12).monospacedDigit())
                     .foregroundStyle(.secondary)
@@ -97,15 +99,15 @@ struct SystemDashboardView: View {
             ])
             Grid(horizontalSpacing: 24, verticalSpacing: 4) {
                 GridRow {
-                    LegendItem(color: Palette.app, label: "앱", value: Format.memory(m.app))
-                    LegendItem(color: Palette.wired, label: "와이어드", value: Format.memory(m.wired))
+                    LegendItem(color: Palette.app, label: L.t("앱", "App"), value: Format.memory(m.app))
+                    LegendItem(color: Palette.wired, label: L.t("와이어드", "Wired"), value: Format.memory(m.wired))
                 }
                 GridRow {
-                    LegendItem(color: Palette.compressed, label: "압축", value: Format.memory(m.compressed))
-                    LegendItem(color: nil, label: "스왑", value: Format.memory(m.swapUsed))
+                    LegendItem(color: Palette.compressed, label: L.t("압축", "Compressed"), value: Format.memory(m.compressed))
+                    LegendItem(color: nil, label: L.t("스왑", "Swap"), value: Format.memory(m.swapUsed))
                 }
                 GridRow {
-                    LegendItem(color: Palette.pressure(m.pressure), label: "메모리 압력", value: m.pressure.label)
+                    LegendItem(color: Palette.pressure(m.pressure), label: L.t("메모리 압력", "Memory pressure"), value: m.pressure.label)
                     Color.clear.frame(height: 1)
                 }
             }
@@ -115,11 +117,11 @@ struct SystemDashboardView: View {
     private var diskCard: some View {
         let d = s.disk
         return Card {
-            CardHeader(icon: "internaldrive", title: "디스크") {
+            CardHeader(icon: "internaldrive", title: L.t("디스크", "Disk")) {
                 BigValue(text: Format.percent(d.usedFraction))
             }
             ProgressBar(fraction: d.usedFraction, color: Palette.disk, height: 6)
-            Text("\(Format.bytes(d.used, decimals: 2)) 사용 · \(Format.bytes(d.available, decimals: 2)) 남음 / \(Format.bytes(d.total, decimals: 2))")
+            Text(Format.capacity(used: d.used, available: d.available, total: d.total))
                 .font(.system(size: 11).monospacedDigit())
                 .foregroundStyle(.secondary)
             HStack(spacing: 14) {
@@ -143,7 +145,7 @@ struct SystemDashboardView: View {
     private var networkCard: some View {
         let n = s.network
         return Card {
-            CardHeader(icon: n.isWiFi ? "wifi" : "cable.connector.horizontal", title: n.kind) {
+            CardHeader(icon: n.isWiFi ? "wifi" : "cable.connector.horizontal", title: n.kind.label) {
                 if n.vpnActive {
                     Text("VPN")
                         .font(.system(size: 9, weight: .bold))
@@ -160,7 +162,7 @@ struct SystemDashboardView: View {
                 Label(Format.rate(n.upRate), systemImage: "arrow.up").foregroundStyle(Palette.up)
             }
             .font(.system(size: 13, weight: .semibold).monospacedDigit())
-            Text(n.ipv4 == nil ? "연결 안 됨" : (showIP ? n.ipv4! : "IP 숨김"))
+            Text(n.ipv4 == nil ? L.t("연결 안 됨", "Not connected") : (showIP ? n.ipv4! : L.t("IP 숨김", "IP hidden")))
                 .font(.system(size: 11).monospacedDigit())
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
@@ -171,13 +173,13 @@ struct SystemDashboardView: View {
         let fans = model.sensors.fans
         let running = fans.contains { $0.rpm > 100 }
         return Card {
-            CardHeader(icon: "fan", title: "팬") {
-                Text(fans.isEmpty ? "없음" : (running ? "동작 중" : "정지"))
+            CardHeader(icon: "fan", title: L.t("팬", "Fans")) {
+                Text(fans.isEmpty ? L.t("없음", "None") : (running ? L.t("동작 중", "Running") : L.t("정지", "Stopped")))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
             if fans.isEmpty {
-                Text("팬 센서를 찾지 못했어요")
+                Text(L.t("팬 센서를 찾지 못했어요", "No fan sensors found"))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
@@ -185,7 +187,7 @@ struct SystemDashboardView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Image(systemName: "fan").font(.system(size: 10)).foregroundStyle(.secondary)
-                        Text(fans.count == 2 ? (fan.id == 0 ? "왼쪽" : "오른쪽") : "팬 \(fan.id + 1)")
+                        Text(fans.count == 2 ? (fan.id == 0 ? L.t("왼쪽", "Left") : L.t("오른쪽", "Right")) : L.t("팬 \(fan.id + 1)", "Fan \(fan.id + 1)"))
                             .font(.system(size: 11))
                         Spacer()
                         Text("\(Int(fan.rpm.rounded())) rpm").font(.system(size: 11).monospacedDigit())
@@ -194,7 +196,7 @@ struct SystemDashboardView: View {
                 }
             }
             if let maxRPM = fans.first?.maxRPM, maxRPM > 0 {
-                Text("범위 \(Int(fans.first!.minRPM))–\(Int(maxRPM)) rpm")
+                Text(L.t("범위", "Range") + " \(Int(fans.first!.minRPM))–\(Int(maxRPM)) rpm")
                     .font(.system(size: 10))
                     .foregroundStyle(.tertiary)
             }
@@ -203,13 +205,13 @@ struct SystemDashboardView: View {
 
     private var footer: some View {
         HStack {
-            FooterButton(icon: "gearshape", title: "설정", action: openSettings)
+            FooterButton(icon: "gearshape", title: L.t("설정", "Settings"), action: openSettings)
             Spacer()
-            FooterButton(icon: "waveform.path.ecg", title: "활성 상태 보기") {
+            FooterButton(icon: "waveform.path.ecg", title: L.t("활성 상태 보기", "Activity Monitor")) {
                 NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Activity Monitor.app"))
             }
             Spacer()
-            FooterButton(icon: "power", title: "종료") { NSApp.terminate(nil) }
+            FooterButton(icon: "power", title: L.t("종료", "Quit")) { NSApp.terminate(nil) }
         }
         .foregroundStyle(.primary)
     }
@@ -239,7 +241,7 @@ private struct ExternalVolumeRow: View {
                     .font(.system(size: 13, weight: .semibold).monospacedDigit())
             }
             ProgressBar(fraction: volume.usedFraction, color: Palette.external, height: 5)
-            Text("\(Format.bytes(volume.used, decimals: 2)) 사용 · \(Format.bytes(volume.available, decimals: 2)) 남음 / \(Format.bytes(volume.total, decimals: 2))")
+            Text(Format.capacity(used: volume.used, available: volume.available, total: volume.total))
                 .font(.system(size: 11).monospacedDigit())
                 .foregroundStyle(.secondary)
         }

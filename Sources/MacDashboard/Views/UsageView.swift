@@ -6,13 +6,14 @@ struct UsageView: View {
     @AppStorage(Prefs.usageMode) private var mode = "used"
     @AppStorage(Prefs.pinnedProvider) private var pinned = ProviderID.claude.rawValue
     @AppStorage(Prefs.showAccount) private var showAccount = true
+    @AppStorage(Prefs.language) private var language = AppLanguage.system.rawValue
     let openSettings: () -> Void
 
     var body: some View {
         VStack(spacing: 10) {
             header
             if model.enabledProviders.isEmpty {
-                Text("설정에서 표시할 서비스를 켜 주세요")
+                Text(L.t("설정에서 표시할 서비스를 켜 주세요", "Turn on a service in Settings"))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 20)
@@ -28,24 +29,25 @@ struct UsageView: View {
             }
             Divider().padding(.horizontal, 4)
             HStack {
-                FooterButton(icon: "gearshape", title: "설정…", action: openSettings)
+                FooterButton(icon: "gearshape", title: L.t("설정…", "Settings…"), action: openSettings)
                 Spacer()
-                FooterButton(icon: "power", title: "종료") { NSApp.terminate(nil) }
+                FooterButton(icon: "power", title: L.t("종료", "Quit")) { NSApp.terminate(nil) }
             }
         }
         .padding(14)
         .frame(width: 400)
+        .id(language)
         .onChange(of: mode) { model.onTick?() }
         .onChange(of: pinned) { model.onTick?() }
     }
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text("사용 한도").font(.system(size: 15, weight: .bold))
+            Text(L.t("사용 한도", "Usage Limits")).font(.system(size: 15, weight: .bold))
             Spacer()
             Picker("", selection: $mode) {
-                Text("사용량").tag("used")
-                Text("남은 양").tag("remaining")
+                Text(L.t("사용량", "Used")).tag("used")
+                Text(L.t("남은 양", "Remaining")).tag("remaining")
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -60,7 +62,7 @@ struct UsageView: View {
                 }
             }
             .buttonStyle(.plain)
-            .help("지금 새로고침")
+            .help(L.t("지금 새로고침", "Refresh now"))
         }
         .padding(.horizontal, 2)
     }
@@ -102,7 +104,7 @@ private struct ProviderCard: View {
                         .foregroundStyle(pinned ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
                 }
                 .buttonStyle(.plain)
-                .help("메뉴 막대에 고정")
+                .help(L.t("메뉴 막대에 고정", "Pin to menu bar"))
             }
 
             if let usage = state.usage {
@@ -110,24 +112,24 @@ private struct ProviderCard: View {
                     WindowRow(window: w, now: now, remaining: remaining)
                 }
                 HStack(spacing: 4) {
-                    Text("업데이트 \(Format.clock(usage.updatedAt))")
-                    if let note = usage.note { Text("· \(note)") }
+                    Text(L.t("업데이트 ", "Updated ") + Format.clock(usage.updatedAt))
+                    if let note = usage.note { Text("· " + note.text) }
                 }
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
                 if let error = state.error {
-                    Label("갱신 실패: \(error)", systemImage: "exclamationmark.triangle")
+                    Label(L.t("갱신 실패: ", "Refresh failed: ") + error.localizedDescription, systemImage: "exclamationmark.triangle")
                         .font(.system(size: 10))
                         .foregroundStyle(.orange)
                 }
             } else if let error = state.error {
-                Label(error, systemImage: "exclamationmark.triangle")
+                Label(error.localizedDescription, systemImage: "exclamationmark.triangle")
                     .font(.system(size: 11))
                     .foregroundStyle(.orange)
             } else {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
-                    Text("\(id.sourceName)에서 불러오는 중…").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text(L.t("\(id.sourceName)에서 불러오는 중…", "Loading from \(id.sourceName)…")).font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
         }
@@ -144,7 +146,7 @@ private struct WindowRow: View {
         let shown = remaining ? 1 - used : used
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(window.label).font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(window.label.text).font(.system(size: 11)).foregroundStyle(.secondary)
                 Spacer()
                 Text(Format.percent(shown)).font(.system(size: 11, weight: .semibold).monospacedDigit())
             }

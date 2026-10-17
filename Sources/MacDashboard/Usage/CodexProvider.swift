@@ -17,7 +17,7 @@ struct CodexProvider: UsageProvider {
               let auth = JSON.object(data),
               let tokens = auth["tokens"] as? [String: Any],
               let accessToken = tokens["access_token"] as? String
-        else { throw UsageError.notLoggedIn("Codex에서 ChatGPT 계정으로 로그인하세요") }
+        else { throw UsageError.notLoggedIn(Loc("Codex에서 ChatGPT 계정으로 로그인하세요", "sign in to Codex with ChatGPT")) }
 
         let claims = (tokens["id_token"] as? String).flatMap(JSON.jwtPayload)
         let email = claims?["email"] as? String
@@ -72,7 +72,7 @@ struct CodexProvider: UsageProvider {
             guard !windows.isEmpty else { continue }
             let updated = JSON.date(event["timestamp"]) ?? Date()
             return ProviderUsage(provider: id, plan: (limits["plan_type"] as? String)?.capitalized, windows: windows,
-                                 updatedAt: updated, note: "로컬 세션 기록 기준")
+                                 updatedAt: updated, note: Loc("로컬 세션 기록 기준", "from local session log"))
         }
         return nil
     }

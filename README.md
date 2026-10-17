@@ -6,20 +6,21 @@ A macOS menu bar app that shows system status and AI usage limits at a glance (S
 
 ![Menu bar](docs/images/menubar.png)
 
-| System dashboard | Usage limits |
-|---|---|
-| ![System dashboard](docs/images/dashboard.png) | ![Usage limits](docs/images/usage.png) |
-
 ---
 
 ## English
 
-> The app's interface is currently in Korean. The screenshots were taken with IP address and account email display turned off.
+| System dashboard | Usage limits |
+|---|---|
+| ![System dashboard](docs/images/en/dashboard.png) | ![Usage limits](docs/images/en/usage.png) |
+
+> The screenshots were taken with IP address and account email display turned off.
 
 ### Features
 - **System popover**: CPU (user/system, per core, temperature), GPU (renderer/tiler, temperature), memory (app/wired/compressed/swap, memory pressure), internal and external disks (capacity, read/write speed), network (speed, IP, VPN indicator), fan rpm
 - **Usage popover**: 5-hour and weekly usage for Claude, ChatGPT (Codex) and Gemini (Antigravity), with time until each limit resets
 - **Settings**: choose menu bar items, pin a service to the badge, switch between used and remaining, refresh interval, hide IP and account emails, launch at login
+- **Languages**: English and Korean. Follows the system language by default; change it in Settings → General → Language
 
 The menu bar badge on the left shows the pinned service's usage; the items on the right show CPU, temperature, memory, SSD and network speed.
 
@@ -69,12 +70,17 @@ open build/MacDashboard.app --args --open system|usage|settings     # open a pan
 
 메뉴 막대에서 시스템 상태와 AI 사용 한도를 한 번에 보는 macOS 앱 (Swift / SwiftUI, macOS 26+).
 
+| 시스템 대시보드 | 사용 한도 |
+|---|---|
+| ![시스템 대시보드](docs/images/ko/dashboard.png) | ![사용 한도](docs/images/ko/usage.png) |
+
 > 스크린샷은 설정에서 IP 주소와 계정 이메일 표시를 끈 상태예요.
 
 ### 기능
 - **시스템 팝오버**: CPU(사용자/시스템, 코어별, 온도), GPU(렌더러/타일러, 온도), 메모리(앱/와이어드/압축/스왑, 메모리 압력), 내장·외장 디스크(용량, 읽기/쓰기 속도), 네트워크(속도, IP, VPN 여부), 팬 rpm
 - **사용 한도 팝오버**: Claude, ChatGPT(Codex), Gemini(Antigravity)의 5시간/주간 사용률과 초기화까지 남은 시간
 - **설정**: 메뉴 막대 항목, 배지에 고정할 서비스, 사용량/남은 양 표시, 갱신 주기, IP·계정 이메일 표시, 로그인 시 자동 실행
+- **언어**: 한국어와 영어. 기본값은 시스템 언어를 따르고, 설정 → 일반 → 언어에서 바꿀 수 있어요
 
 메뉴 막대 왼쪽 배지는 고정한 서비스의 사용량, 오른쪽은 CPU · 온도 · 메모리 · SSD · 네트워크 속도예요.
 

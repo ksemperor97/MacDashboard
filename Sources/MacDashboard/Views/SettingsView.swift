@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
+    @AppStorage(Prefs.language) private var language = AppLanguage.system.rawValue
     @AppStorage(Prefs.menuCPU) private var menuCPU = true
     @AppStorage(Prefs.menuMemory) private var menuMemory = true
     @AppStorage(Prefs.menuNetwork) private var menuNetwork = true
@@ -19,33 +20,36 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("메뉴 막대") {
-                Toggle("CPU 사용률", isOn: $menuCPU)
-                Toggle("CPU 온도", isOn: $menuTemp)
-                Toggle("메모리", isOn: $menuMemory)
-                Toggle("SSD 사용률", isOn: $menuDisk)
-                Toggle("네트워크 속도", isOn: $menuNetwork)
-                Toggle("AI 사용량 배지", isOn: $menuUsage)
+            Section(L.t("메뉴 막대", "Menu Bar")) {
+                Toggle(L.t("CPU 사용률", "CPU usage"), isOn: $menuCPU)
+                Toggle(L.t("CPU 온도", "CPU temperature"), isOn: $menuTemp)
+                Toggle(L.t("메모리", "Memory"), isOn: $menuMemory)
+                Toggle(L.t("SSD 사용률", "SSD usage"), isOn: $menuDisk)
+                Toggle(L.t("네트워크 속도", "Network speed"), isOn: $menuNetwork)
+                Toggle(L.t("AI 사용량 배지", "AI usage badge"), isOn: $menuUsage)
             }
-            Section("AI 사용 한도") {
-                Toggle("Claude (Claude Code 로그인)", isOn: $claudeOn)
-                Toggle("ChatGPT (Codex 로그인)", isOn: $codexOn)
+            Section(L.t("AI 사용 한도", "AI Usage Limits")) {
+                Toggle(L.t("Claude (Claude Code 로그인)", "Claude (Claude Code login)"), isOn: $claudeOn)
+                Toggle(L.t("ChatGPT (Codex 로그인)", "ChatGPT (Codex login)"), isOn: $codexOn)
                 Toggle("Gemini (Antigravity CLI)", isOn: $geminiOn)
-                Picker("배지에 표시할 서비스", selection: $pinned) {
+                Picker(L.t("배지에 표시할 서비스", "Service shown in badge"), selection: $pinned) {
                     ForEach(ProviderID.allCases) { Text($0.displayName).tag($0.rawValue) }
                 }
-                Picker("표시 방식", selection: $mode) {
-                    Text("사용량").tag("used")
-                    Text("남은 양").tag("remaining")
+                Picker(L.t("표시 방식", "Display"), selection: $mode) {
+                    Text(L.t("사용량", "Used")).tag("used")
+                    Text(L.t("남은 양", "Remaining")).tag("remaining")
                 }
-                Picker("자동 갱신 주기", selection: $interval) {
-                    ForEach([1, 5, 10, 15, 30], id: \.self) { Text("\($0)분").tag($0) }
+                Picker(L.t("자동 갱신 주기", "Refresh interval"), selection: $interval) {
+                    ForEach([1, 5, 10, 15, 30], id: \.self) { Text(L.t("\($0)분", "\($0) min")).tag($0) }
                 }
-                Toggle("계정 이메일 표시", isOn: $showAccount)
+                Toggle(L.t("계정 이메일 표시", "Show account email"), isOn: $showAccount)
             }
-            Section("일반") {
-                Toggle("IP 주소 표시", isOn: $showIP)
-                Toggle("로그인 시 자동 실행", isOn: Binding(
+            Section(L.t("일반", "General")) {
+                Picker(L.t("언어 (Language)", "Language"), selection: $language) {
+                    ForEach(AppLanguage.allCases) { Text($0.pickerLabel).tag($0.rawValue) }
+                }
+                Toggle(L.t("IP 주소 표시", "Show IP address"), isOn: $showIP)
+                Toggle(L.t("로그인 시 자동 실행", "Launch at login"), isOn: Binding(
                     get: { model.launchAtLogin },
                     set: { model.setLaunchAtLogin($0) }
                 ))
@@ -57,9 +61,11 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
+        .id(language)
         .onChange(of: [menuCPU, menuMemory, menuNetwork, menuTemp, menuDisk, menuUsage]) { model.onTick?() }
         .onChange(of: [claudeOn, codexOn, geminiOn]) { model.refreshUsage(force: false) }
         .onChange(of: pinned) { model.onTick?() }
         .onChange(of: mode) { model.onTick?() }
+        .onChange(of: language) { model.onTick?() }
     }
 }

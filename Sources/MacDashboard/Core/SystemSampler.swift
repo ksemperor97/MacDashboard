@@ -15,9 +15,9 @@ enum MemoryPressure: Int {
 
     var label: String {
         switch self {
-        case .normal: "정상"
-        case .warning: "경고"
-        case .critical: "위험"
+        case .normal: L.t("정상", "Normal")
+        case .warning: L.t("경고", "Warning")
+        case .critical: L.t("위험", "Critical")
         }
     }
 }
@@ -44,12 +44,27 @@ struct DiskSample {
 
 struct NetworkSample {
     var interface: String?      // BSD name, e.g. en0
-    var kind: String = "네트워크" // 이더넷, Wi-Fi, ...
+    var kind = NetworkKind.unknown
     var isWiFi = false
     var vpnActive = false       // default route goes through a tunnel (utun/ipsec/ppp)
     var ipv4: String?
     var downRate: Double = 0    // bytes/s
     var upRate: Double = 0      // bytes/s
+}
+
+enum NetworkKind: Equatable {
+    case ethernet, wifi, vpn, unknown
+    case named(String)   // e.g. Thunderbolt Bridge, from SystemConfiguration
+
+    var label: String {
+        switch self {
+        case .ethernet: L.t("이더넷", "Ethernet")
+        case .wifi: "Wi-Fi"
+        case .vpn: "VPN"
+        case .unknown: L.t("네트워크", "Network")
+        case .named(let name): name
+        }
+    }
 }
 
 struct GPUSample {
@@ -74,7 +89,7 @@ final class SystemSampler {
     private var prevDisk: (read: UInt64, write: UInt64, time: TimeInterval)?
     private var prevNet: (name: String, rx: UInt64, tx: UInt64, time: TimeInterval)?
     private var cachedVolume: (total: Int64, available: Int64, time: TimeInterval)?
-    private var cachedInterface: (name: String?, kind: String, isWiFi: Bool, vpn: Bool, ip: String?, time: TimeInterval)?
+    private var cachedInterface: (name: String?, kind: NetworkKind, isWiFi: Bool, vpn: Bool, ip: String?, time: TimeInterval)?
     private let store = SCDynamicStoreCreate(nil, "MacDashboard" as CFString, nil, nil)
     private var lastTime: TimeInterval = -1
 
@@ -216,7 +231,7 @@ final class SystemSampler {
             let vpn = primary.map(isTunnel) ?? false
             // With a VPN the default route is a tunnel; report the physical link that carries it.
             let name = vpn ? (physicalInterface() ?? primary) : primary
-            let (kind, isWiFi) = name.map(interfaceKind) ?? ("네트워크", false)
+            let (kind, isWiFi) = name.map(interfaceKind) ?? (NetworkKind.unknown, false)
             cachedInterface = (name, kind, isWiFi, vpn, name.flatMap(ipv4Address), now)
         }
         var sample = NetworkSample()
@@ -263,14 +278,14 @@ final class SystemSampler {
         return nil
     }
 
-    private func interfaceKind(_ bsdName: String) -> (String, Bool) {
+    private func interfaceKind(_ bsdName: String) -> (NetworkKind, Bool) {
         guard let all = SCNetworkInterfaceCopyAll() as? [SCNetworkInterface],
               let match = all.first(where: { SCNetworkInterfaceGetBSDName($0) as String? == bsdName }),
               let type = SCNetworkInterfaceGetInterfaceType(match)
-        else { return (bsdName.hasPrefix("utun") ? "VPN" : "네트워크", false) }
-        if type == kSCNetworkInterfaceTypeIEEE80211 { return ("Wi-Fi", true) }
-        if type == kSCNetworkInterfaceTypeEthernet { return ("이더넷", false) }
-        return ((SCNetworkInterfaceGetLocalizedDisplayName(match) as String?) ?? bsdName, false)
+        else { return (bsdName.hasPrefix("utun") ? .vpn : .unknown, false) }
+        if type == kSCNetworkInterfaceTypeIEEE80211 { return (.wifi, true) }
+        if type == kSCNetworkInterfaceTypeEthernet { return (.ethernet, false) }
+        return (.named((SCNetworkInterfaceGetLocalizedDisplayName(match) as String?) ?? bsdName), false)
     }
 
     private func ipv4Address(_ bsdName: String) -> String? {

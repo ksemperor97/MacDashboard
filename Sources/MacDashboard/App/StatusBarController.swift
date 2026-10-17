@@ -33,8 +33,6 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             item.button?.action = action
             item.button?.imagePosition = .imageOnly
         }
-        systemItem.button?.setAccessibilityLabel("시스템 상태")
-        usageItem.button?.setAccessibilityLabel("AI 사용 한도")
         update()
     }
 
@@ -95,6 +93,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     // MARK: Rendering
 
     func update() {
+        systemItem.button?.setAccessibilityLabel(L.t("시스템 상태", "System Status"))
+        usageItem.button?.setAccessibilityLabel(L.t("AI 사용 한도", "AI Usage Limits"))
         updateSystemItem()
         updateUsageItem()
     }

@@ -7,9 +7,9 @@ enum ShellError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notFound(let name): "\(name) 실행 파일을 찾을 수 없어요"
-        case .timeout(let name): "\(name) 응답 시간 초과"
-        case .failed(let name, let code, let message): "\(name) 실패 (\(code)) \(message)"
+        case .notFound(let name): L.t("\(name) 실행 파일을 찾을 수 없어요", "\(name) executable not found")
+        case .timeout(let name): L.t("\(name) 응답 시간 초과", "\(name) timed out")
+        case .failed(let name, let code, let message): L.t("\(name) 실패", "\(name) failed") + " (\(code)) \(message)"
         }
     }
 }
