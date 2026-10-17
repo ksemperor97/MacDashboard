@@ -84,6 +84,7 @@ final class AppModel {
     @ObservationIgnored private var sensorReader: Sensors?
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var usageTimer: Timer?
+    @ObservationIgnored private var usageResetTimer: Timer?
     @ObservationIgnored private var volumeTimer: Timer?
     @ObservationIgnored private var lastSensorRead = Date.distantPast
     @ObservationIgnored private let providers: [ProviderID: UsageProvider] = [
@@ -159,7 +160,9 @@ final class AppModel {
         }
     }
 
-    private func push(_ history: inout [Double], _ value: Double) {
+    private func push(_ history: inout [Double], _ value: Double?) {
+        // Do not connect valid measurements across a gap or invent a zero sample.
+        guard let value else { history.removeAll(keepingCapacity: true); return }
         history.append(value)
         if history.count > Self.historyLength { history.removeFirst(history.count - Self.historyLength) }
     }
@@ -170,12 +173,14 @@ final class AppModel {
 
     var isRefreshingUsage: Bool { usage.values.contains { $0.loading } }
 
-    func refreshUsage(force: Bool) {
+    func refreshUsage(force: Bool, resetOnly: Bool = false) {
         let interval = TimeInterval(max(Prefs.d.integer(forKey: Prefs.usageInterval), 1) * 60)
         for id in enabledProviders {
             var state = usage[id] ?? UsageState()
             if state.loading { continue }
-            if !force, let last = state.lastAttempt, Date().timeIntervalSince(last) < interval { continue }
+            let needsReset = state.needsResetRefresh()
+            if resetOnly && !needsReset { continue }
+            if !force && !needsReset, let last = state.lastAttempt, Date().timeIntervalSince(last) < interval { continue }
             guard let provider = providers[id] else { continue }
             state.loading = true
             state.lastAttempt = Date()
@@ -195,10 +200,35 @@ final class AppModel {
                         s.error = e
                     }
                     self.usage[id] = s
+                    if s.needsResetRefresh() {
+                        self.refreshUsage(force: false, resetOnly: true)
+                    }
+                    self.scheduleUsageReset()
                     self.onTick?()
                 }
             }
         }
+        scheduleUsageReset()
+    }
+
+    private func scheduleUsageReset() {
+        usageResetTimer?.invalidate()
+        let now = Date()
+        let next = enabledProviders.flatMap { id -> [Date] in
+            guard let data = usage[id]?.usage else { return [] }
+            return data.windows.compactMap { window in
+                guard let reset = window.resetsAt, reset > now, data.updatedAt < reset else { return nil }
+                return reset
+            }
+        }.min()
+        guard let next else { return }
+        usageResetTimer = Timer(fire: next, interval: 0, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.refreshUsage(force: false, resetOnly: true)
+                self?.onTick?()
+            }
+        }
+        RunLoop.main.add(usageResetTimer!, forMode: .common)
     }
 
     /// Re-fetches when a popover opens and the data is older than a minute.

@@ -12,6 +12,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private var lastSystemKey = ""
     private var lastUsageKey = ""
     private var appearanceObservation: NSKeyValueObservation?
+    private var menuBarIsDark: Bool?
     var openSettings: (() -> Void)?
 
     init(model: AppModel) {
@@ -35,10 +36,14 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             item.button?.imagePosition = .imageOnly
         }
         // Colored badges draw their own text color, so redraw when the menu bar turns light/dark.
-        appearanceObservation = usageItem.button?.observe(\.effectiveAppearance) { [weak self] _, _ in
+        // Setting the image can re-announce the same appearance, so only a real light/dark switch
+        // triggers a redraw; otherwise this would loop and keep the CPU busy.
+        appearanceObservation = usageItem.button?.observe(\.effectiveAppearance) { [weak self] button, _ in
+            let isDark = button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             DispatchQueue.main.async {
-                self?.lastUsageKey = ""
-                self?.update()
+                guard let self, isDark != self.menuBarIsDark else { return }
+                self.menuBarIsDark = isDark
+                self.update()
             }
         }
         update()
@@ -46,12 +51,16 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
     /// Popover content is created on open and dropped on close, so hidden SwiftUI views don't
     /// keep re-rendering on every sample.
-    private func makeContent(for popover: NSPopover) -> NSViewController {
+    private func makeContent(for popover: NSPopover, screen: NSScreen?) -> NSViewController {
         let settings: () -> Void = { [weak self] in self?.showSettings() }
         let root = popover === systemPopover
             ? AnyView(SystemDashboardView(openSettings: settings).environment(model))
             : AnyView(UsageView(openSettings: settings).environment(model))
-        let host = NSHostingController(rootView: root)
+        // Leave room for the popover arrow and margins above the Dock/visible screen edge.
+        let maximumHeight = max(1, (screen?.visibleFrame.height ?? 700) - 24)
+        let host = NSHostingController(rootView: HeightLimitedScrollView(
+            width: popover === systemPopover ? 460 : 400, maximumHeight: maximumHeight
+        ) { root })
         host.sizingOptions = .preferredContentSize
         return host
     }
@@ -76,7 +85,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         }
         [systemPopover, usagePopover].filter { $0 !== popover && $0.isShown }.forEach { $0.performClose(nil) }
         guard let button = item.button else { return }
-        popover.contentViewController = makeContent(for: popover)
+        popover.contentViewController = makeContent(for: popover, screen: button.window?.screen ?? NSScreen.main)
         NSApp.activate()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()
@@ -143,8 +152,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             var columns: [StatusColumn] = showIcons ? [.logo(id)] : []
             let windows = model.usage[id]?.usage?.badgeWindows ?? []
             for w in windows {
-                let used = w.effectiveUsed()
-                columns.append(.metric(w.kind.short ?? "", Format.percent(remaining ? 1 - used : used)))
+                let used = w.effectiveUsed(updatedAt: model.usage[id]?.usage?.updatedAt ?? .distantPast)
+                columns.append(.metric(w.kind.short ?? "", Format.percent(used.map { remaining ? 1 - $0 : $0 })))
             }
             if windows.isEmpty {
                 columns.append(.metric(showIcons ? "" : String(id.displayName.prefix(6)).uppercased(), "–"))

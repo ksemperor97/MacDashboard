@@ -18,7 +18,7 @@ struct UsageView: View {
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 20)
             }
-            TimelineView(.periodic(from: .now, by: 30)) { context in
+            TimelineView(.periodic(from: .now, by: 1)) { context in
                 VStack(spacing: 10) {
                     ForEach(model.enabledProviders) { id in
                         ProviderCard(id: id, state: model.usage[id] ?? UsageState(), now: context.date,
@@ -108,15 +108,15 @@ private struct ProviderCard: View {
             }
 
             if let usage = state.usage {
-                ForEach(usage.windows.filter { $0.isVisible(at: now) }) { w in
-                    WindowRow(window: w, now: now, remaining: remaining)
+                ForEach(usage.windows.filter { $0.isVisible(updatedAt: usage.updatedAt, at: now) }) { w in
+                    WindowRow(window: w, updatedAt: usage.updatedAt, now: now, remaining: remaining)
                 }
                 HStack(spacing: 4) {
                     Text(L.t("업데이트 ", "Updated ") + Format.clock(usage.updatedAt))
                     if let note = usage.note { Text("· " + note.text) }
                 }
                 .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
                 if let error = state.error {
                     Label(L.t("갱신 실패: ", "Refresh failed: ") + error.localizedDescription, systemImage: "exclamationmark.triangle")
                         .font(.system(size: 10))
@@ -138,20 +138,21 @@ private struct ProviderCard: View {
 
 private struct WindowRow: View {
     let window: UsageWindow
+    let updatedAt: Date
     let now: Date
     let remaining: Bool
 
     var body: some View {
-        let used = window.effectiveUsed(at: now)
-        let shown = remaining ? 1 - used : used
+        let used = window.effectiveUsed(updatedAt: updatedAt, at: now)
+        let shown = used.map { remaining ? 1 - $0 : $0 }
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(window.label.text).font(.system(size: 11)).foregroundStyle(.secondary)
                 Spacer()
                 Text(Format.percent(shown)).font(.system(size: 11, weight: .semibold).monospacedDigit())
             }
-            ProgressBar(fraction: shown, color: Palette.level(used), height: 5)
-            Text(Format.resetText(window.resetsAt, now: now))
+            ProgressBar(fraction: shown, color: used.map(Palette.level) ?? .secondary, height: 5)
+            Text(used == nil ? L.t("갱신 필요", "Refresh needed") : Format.resetText(window.resetsAt, now: now))
                 .font(.system(size: 11, weight: .medium))
         }
     }

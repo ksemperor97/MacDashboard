@@ -103,7 +103,7 @@ struct LegendItem: View {
 }
 
 struct ProgressBar: View {
-    let fraction: Double
+    let fraction: Double?
     var color: Color = .accentColor
     var height: CGFloat = 6
 
@@ -112,7 +112,7 @@ struct ProgressBar: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(.primary.opacity(0.1))
                 Capsule().fill(color)
-                    .frame(width: max(geo.size.width * min(max(fraction, 0), 1), fraction > 0 ? height : 0))
+                    .frame(width: max(geo.size.width * min(max(fraction ?? 0, 0), 1), (fraction ?? 0) > 0 ? height : 0))
             }
         }
         .frame(height: height)

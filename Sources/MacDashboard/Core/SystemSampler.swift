@@ -34,12 +34,18 @@ struct MemorySample {
 }
 
 struct DiskSample {
-    var total: Int64 = 0
-    var available: Int64 = 0
-    var readRate: Double = 0   // bytes/s
-    var writeRate: Double = 0  // bytes/s
-    var used: Int64 { max(total - available, 0) }
-    var usedFraction: Double { total > 0 ? Double(used) / Double(total) : 0 }
+    var total: Int64?
+    var available: Int64?
+    var readRate: Double?
+    var writeRate: Double?
+    var used: Int64? {
+        guard let total, let available else { return nil }
+        return max(total - available, 0)
+    }
+    var usedFraction: Double? {
+        guard let total, total > 0, let used else { return nil }
+        return Double(used) / Double(total)
+    }
 }
 
 struct NetworkSample {
@@ -68,9 +74,9 @@ enum NetworkKind: Equatable {
 }
 
 struct GPUSample {
-    var device: Double = 0    // 0...1
-    var renderer: Double = 0
-    var tiler: Double = 0
+    var device: Double?    // nil means unavailable; zero is a measured idle GPU
+    var renderer: Double?
+    var tiler: Double?
 }
 
 struct SystemSnapshot {
@@ -88,7 +94,7 @@ final class SystemSampler {
     private var prevCPUTicks: [[UInt32]] = []
     private var prevDisk: (read: UInt64, write: UInt64, time: TimeInterval)?
     private var prevNet: (name: String, rx: UInt64, tx: UInt64, time: TimeInterval)?
-    private var cachedVolume: (total: Int64, available: Int64, time: TimeInterval)?
+    private var cachedVolume: (total: Int64?, available: Int64?, time: TimeInterval)?
     private var cachedInterface: (name: String?, kind: NetworkKind, isWiFi: Bool, vpn: Bool, ip: String?, time: TimeInterval)?
     private let store = SCDynamicStoreCreate(nil, "MacDashboard" as CFString, nil, nil)
     private var lastTime: TimeInterval = -1
@@ -184,16 +190,18 @@ final class SystemSampler {
         var sample = DiskSample()
         if cachedVolume == nil || now - cachedVolume!.time > 30 {
             let keys: Set<URLResourceKey> = [.volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey]
-            if let values = try? URL(fileURLWithPath: "/").resourceValues(forKeys: keys) {
-                cachedVolume = (Int64(values.volumeTotalCapacity ?? 0), values.volumeAvailableCapacityForImportantUsage ?? 0, now)
-            }
+            let values = try? URL(fileURLWithPath: "/").resourceValues(forKeys: keys)
+            cachedVolume = (values?.volumeTotalCapacity.map(Int64.init), values?.volumeAvailableCapacityForImportantUsage, now)
         }
         if let v = cachedVolume {
             sample.total = v.total
             sample.available = v.available
         }
 
-        let (read, write) = blockStorageBytes()
+        guard let (read, write) = blockStorageBytes() else {
+            prevDisk = nil
+            return sample
+        }
         if let prev = prevDisk, now > prev.time {
             let dt = now - prev.time
             sample.readRate = counterDelta(read, prev.read) / dt
@@ -212,21 +220,25 @@ final class SystemSampler {
     /// Invalidates the cached volume size so the next sample re-reads it.
     func refreshVolume() { cachedVolume = nil }
 
-    private func blockStorageBytes() -> (UInt64, UInt64) {
+    private func blockStorageBytes() -> (UInt64, UInt64)? {
         var iterator: io_iterator_t = 0
         guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOBlockStorageDriver"), &iterator) == KERN_SUCCESS else {
-            return (0, 0)
+            return nil
         }
         defer { IOObjectRelease(iterator) }
         var read: UInt64 = 0, write: UInt64 = 0
+        var found = false
         while case let entry = IOIteratorNext(iterator), entry != 0 {
             defer { IOObjectRelease(entry) }
             guard let stats = IORegistryEntryCreateCFProperty(entry, "Statistics" as CFString, kCFAllocatorDefault, 0)?
                 .takeRetainedValue() as? [String: Any] else { continue }
-            read += (stats["Bytes (Read)"] as? NSNumber)?.uint64Value ?? 0
-            write += (stats["Bytes (Write)"] as? NSNumber)?.uint64Value ?? 0
+            guard let r = stats["Bytes (Read)"] as? NSNumber,
+                  let w = stats["Bytes (Write)"] as? NSNumber else { continue }
+            found = true
+            read += r.uint64Value
+            write += w.uint64Value
         }
-        return (read, write)
+        return found ? (read, write) : nil
     }
 
     // MARK: Network
@@ -350,10 +362,13 @@ final class SystemSampler {
             defer { IOObjectRelease(entry) }
             guard let stats = IORegistryEntryCreateCFProperty(entry, "PerformanceStatistics" as CFString, kCFAllocatorDefault, 0)?
                 .takeRetainedValue() as? [String: Any] else { continue }
-            func pct(_ key: String) -> Double { ((stats[key] as? NSNumber)?.doubleValue ?? 0) / 100 }
-            sample.device = max(sample.device, pct("Device Utilization %"))
-            sample.renderer = max(sample.renderer, pct("Renderer Utilization %"))
-            sample.tiler = max(sample.tiler, pct("Tiler Utilization %"))
+            func merge(_ current: Double?, _ key: String) -> Double? {
+                guard let value = (stats[key] as? NSNumber)?.doubleValue, value.isFinite else { return current }
+                return max(current ?? 0, min(max(value / 100, 0), 1))
+            }
+            sample.device = merge(sample.device, "Device Utilization %")
+            sample.renderer = merge(sample.renderer, "Renderer Utilization %")
+            sample.tiler = merge(sample.tiler, "Tiler Utilization %")
         }
         return sample
     }

@@ -1,8 +1,9 @@
 import Foundation
 
 enum Format {
-    static func percent(_ fraction: Double) -> String {
-        "\(Int((fraction * 100).rounded()))%"
+    static func percent(_ fraction: Double?) -> String {
+        guard let fraction, fraction.isFinite else { return "–" }
+        return "\(Int((fraction * 100).rounded()))%"
     }
 
     /// 14.2 GB style (decimal units, like Finder and Activity Monitor).
@@ -30,10 +31,14 @@ enum Format {
     }
 
     static func bytes(_ value: UInt64, decimals: Int = 1) -> String { bytes(Double(value), decimals: decimals) }
-    static func bytes(_ value: Int64, decimals: Int = 1) -> String { bytes(Double(value), decimals: decimals) }
+    static func bytes(_ value: Int64?, decimals: Int = 1) -> String {
+        guard let value else { return "–" }
+        return bytes(Double(value), decimals: decimals)
+    }
 
     /// Popover rate with at most three significant digits: 512 B/s, 17.0 KB/s, 123 KB/s, 1.2 MB/s
-    static func rate(_ bytesPerSecond: Double) -> String {
+    static func rate(_ bytesPerSecond: Double?) -> String {
+        guard let bytesPerSecond else { return "–" }
         let v = bytesPerSecond.isFinite ? max(bytesPerSecond, 0) : 0
         if v < 999.5 { return "\(Int(v.rounded())) B/s" }
         let (number, unit) = scaled(v / 1000, decimalsBelow: 100, units: ["KB", "MB", "GB", "TB"])
@@ -86,7 +91,8 @@ enum Format {
     }
 
     /// "1.02 TB 사용 · 3.98 TB 남음 / 5.00 TB" / "1.02 TB used · 3.98 TB free / 5.00 TB"
-    static func capacity(used: Int64, available: Int64, total: Int64) -> String {
+    static func capacity(used: Int64?, available: Int64?, total: Int64?) -> String {
+        guard let used, let available, let total else { return L.t("용량 정보 없음", "Capacity unavailable") }
         let u = bytes(used, decimals: 2), a = bytes(available, decimals: 2), t = bytes(total, decimals: 2)
         return L.t("\(u) 사용 · \(a) 남음 / \(t)", "\(u) used · \(a) free / \(t)")
     }

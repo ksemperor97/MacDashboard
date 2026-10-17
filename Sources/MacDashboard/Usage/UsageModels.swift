@@ -67,15 +67,22 @@ struct UsageWindow: Identifiable {
     /// are only listed while they have usage.
     var hideWhenUnused = false
 
-    /// Once the reset time has passed the reported value is stale; the window starts again at 0.
-    func effectiveUsed(at now: Date = Date()) -> Double {
-        if let resetsAt, resetsAt <= now { return 0 }
+    /// A reset invalidates only observations made before it; never invent a new zero value.
+    func needsRefresh(updatedAt: Date, at now: Date = Date()) -> Bool {
+        guard let resetsAt else { return false }
+        return updatedAt < resetsAt && resetsAt <= now
+    }
+
+    func effectiveUsed(updatedAt: Date = .distantPast, at now: Date = Date()) -> Double? {
+        guard !needsRefresh(updatedAt: updatedAt, at: now), usedFraction.isFinite else { return nil }
         return min(max(usedFraction, 0), 1)
     }
 
-    func isVisible(at now: Date = Date()) -> Bool {
-        !hideWhenUnused || effectiveUsed(at: now) > 0
+    func isVisible(updatedAt: Date = .distantPast, at now: Date = Date()) -> Bool {
+        // Keep expired rows visible so the user sees why their value is unavailable.
+        !hideWhenUnused || effectiveUsed(updatedAt: updatedAt, at: now).map { $0 > 0 } != false
     }
+
 }
 
 struct ProviderUsage {
@@ -97,6 +104,15 @@ struct UsageState {
     var error: Error?
     var loading = false
     var lastAttempt: Date?
+
+    func needsResetRefresh(at now: Date = Date()) -> Bool {
+        guard let usage else { return false }
+        return usage.windows.contains { window in
+            guard let reset = window.resetsAt else { return false }
+            return window.needsRefresh(updatedAt: usage.updatedAt, at: now)
+                && (lastAttempt == nil || lastAttempt! < reset)
+        }
+    }
 }
 
 protocol UsageProvider {

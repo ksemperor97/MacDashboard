@@ -198,7 +198,7 @@ struct SystemDashboardView: View {
             if let maxRPM = fans.first?.maxRPM, maxRPM > 0 {
                 Text(L.t("범위", "Range") + " \(Int(fans.first!.minRPM))–\(Int(maxRPM)) rpm")
                     .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
         }
     }

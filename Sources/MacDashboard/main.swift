@@ -44,7 +44,7 @@ if CommandLine.arguments.contains("--dump-usage") {
                 let u = try await p.fetch()
                 print("[\(p.id.displayName)] plan=\(u.plan ?? "-") account=\(u.account != nil ? "yes" : "no") note=\(u.note?.text ?? "-") (\(String(format: "%.1f", Date().timeIntervalSince(start)))s)")
                 for w in u.windows {
-                    print("   \(w.label.text) [\(w.kind.short ?? "-")] used \(Format.percent(w.effectiveUsed())) · \(Format.resetText(w.resetsAt))\(w.isVisible() ? "" : " (숨김)")")
+                    print("   \(w.label.text) [\(w.kind.short ?? "-")] used \(Format.percent(w.effectiveUsed(updatedAt: u.updatedAt))) · \(Format.resetText(w.resetsAt))\(w.isVisible(updatedAt: u.updatedAt) ? "" : " (숨김)")")
                 }
             } catch {
                 print("[\(p.id.displayName)] ERROR \(error.localizedDescription)")
