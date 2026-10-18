@@ -1,7 +1,8 @@
 import Foundation
 
 /// Claude subscription limits via the OAuth token that Claude Code keeps in the login keychain.
-/// The token is only read; refreshing is left to Claude Code itself so its login never breaks.
+/// The token is only read here. When it has expired, Claude Code itself is asked to refresh it
+/// (so the rotated refresh token is stored by Claude Code and its login never breaks).
 struct ClaudeProvider: UsageProvider {
     let id = ProviderID.claude
 
@@ -14,8 +15,7 @@ struct ClaudeProvider: UsageProvider {
     func fetch() async throws -> ProviderUsage {
         var creds = try await readCredentials()
         if let exp = creds.expiresAt, exp < Date().addingTimeInterval(60) {
-            // `claude auth status` refreshes an expired session as a side effect; read again afterwards.
-            _ = try? await authStatus()
+            await refreshThroughClaudeCode()
             creds = try await readCredentials()
             if let exp = creds.expiresAt, exp < Date() {
                 throw UsageError.tokenExpired(runClaudeHint)
@@ -26,7 +26,7 @@ struct ClaudeProvider: UsageProvider {
         do {
             json = try await requestUsage(token: creds.accessToken)
         } catch UsageError.http(401) {
-            _ = try? await authStatus()
+            await refreshThroughClaudeCode()
             let fresh = try await readCredentials()
             guard fresh.accessToken != creds.accessToken else {
                 throw UsageError.tokenExpired(runClaudeHint)
@@ -55,7 +55,16 @@ struct ClaudeProvider: UsageProvider {
                              plan: plan?.capitalized, windows: windows, updatedAt: Date())
     }
 
-    private var runClaudeHint: Loc { Loc("터미널에서 claude를 한 번 실행하세요", "run claude once in Terminal") }
+    /// Only reached when Claude Code could not refresh either (e.g. the refresh token expired).
+    private var runClaudeHint: Loc { Loc("터미널에서 claude로 다시 로그인하세요", "sign in again with claude in Terminal") }
+
+    /// `claude -p /usage` refreshes an expired OAuth token as a side effect without calling a model
+    /// (0 tokens, about 3 s). `claude auth status` does not refresh, so it can't be used for this.
+    private func refreshThroughClaudeCode() async {
+        guard let claude = Shell.find("claude") else { return }
+        _ = try? await Shell.run(claude, ["-p", "/usage", "--output-format", "json", "--no-session-persistence"],
+                                 timeout: 45)
+    }
 
     private func requestUsage(token: String) async throws -> [String: Any] {
         try await HTTP.getJSON(URL(string: "https://api.anthropic.com/api/oauth/usage")!, headers: [
