@@ -19,13 +19,15 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.2.5</string>
+	<string>1.2.6</string>
 	<key>CFBundleVersion</key>
-	<string>8</string>
+	<string>9</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>MacDashboard opens a Terminal window to install and sign in to Claude Code, Codex or Antigravity when you click Connect. / 연결하기를 누르면 터미널 창을 열어 Claude Code, Codex, Antigravity 설치와 로그인을 진행해요.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 </dict>

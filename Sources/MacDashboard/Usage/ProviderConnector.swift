@@ -39,13 +39,35 @@ enum ProviderConnector {
         let url = scriptURL(for: id)
         try script(for: id).write(to: url, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
-        let terminal = URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
-        NSWorkspace.shared.open([url], withApplicationAt: terminal, configuration: NSWorkspace.OpenConfiguration())
+        Task { await launchInTerminal(url) }
     }
 
-    /// The script leaves a marker as its first step. Terminal starts a .command by typing its path
-    /// into the user's shell, and that can fail (e.g. the first character gets swallowed); without
-    /// the marker the card offers to copy the command instead.
+    /// Opening a .command makes Terminal type its path into a brand-new shell, and on some Macs the
+    /// first character gets swallowed ("Users/…: no such file"). So Terminal is driven directly: open
+    /// a window, give the shell time to start, then send the command padded with spaces so a lost
+    /// character is harmless. This asks once for permission to control Terminal; if that's denied
+    /// or fails, fall back to opening the .command.
+    private static func launchInTerminal(_ url: URL) async {
+        let command = "        bash '\(url.path)'"
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let script = """
+        tell application "Terminal"
+            activate
+            set setupTab to do script ""
+            delay 1.5
+            do script "\(command)" in setupTab
+        end tell
+        """
+        do {
+            _ = try await Shell.run("/usr/bin/osascript", ["-e", script], timeout: 120)
+        } catch {
+            let terminal = URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
+            _ = try? await NSWorkspace.shared.open([url], withApplicationAt: terminal, configuration: NSWorkspace.OpenConfiguration())
+        }
+    }
+
+    /// The script leaves a marker as its first step; without it the card offers to copy the command.
     static func didStart(_ id: ProviderID) -> Bool {
         FileManager.default.fileExists(atPath: startedMarker(for: id).path)
     }

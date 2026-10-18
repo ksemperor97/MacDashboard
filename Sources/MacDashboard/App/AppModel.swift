@@ -229,7 +229,8 @@ final class AppModel {
         }
         connecting[id] = Date()
         connectStalled.remove(id)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+        // Long enough to answer the one-time "control Terminal" prompt before suggesting the fallback.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
             guard let self, self.connecting[id] != nil, !ProviderConnector.didStart(id) else { return }
             self.connectStalled.insert(id)
         }
