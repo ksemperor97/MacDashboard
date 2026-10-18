@@ -6,10 +6,15 @@ struct GeminiProvider: UsageProvider {
     let id = ProviderID.gemini
 
     func fetch() async throws -> ProviderUsage {
-        guard let agy = Shell.find("agy") else {
+        guard let agy = AntigravityCLI.locate() else {
             throw UsageError.notInstalled(Loc("Antigravity CLI", "Antigravity CLI"))
         }
-        let data = try await Shell.run(agy, ["-p", "/quota", "--output-format", "json"], timeout: 90)
+        let data: Data
+        do {
+            data = try await Shell.run(agy, ["-p", "/quota", "--output-format", "json"], timeout: 90)
+        } catch ShellError.failed(_, let code, _) where code == 126 || code == 127 {
+            throw UsageError.notInstalled(Loc("Antigravity CLI", "Antigravity CLI"))
+        }
         guard let json = JSON.object(data),
               let command = json["command"] as? [String: Any],
               let payload = command["data"] as? [String: Any],
@@ -50,5 +55,36 @@ struct GeminiProvider: UsageProvider {
         case "Claude and GPT models": "Claude·GPT"
         default: name
         }
+    }
+}
+
+/// Finds the real Antigravity CLI. The Antigravity desktop app can leave an `agy` shell script that
+/// launches /Applications/Antigravity.app (and breaks when the app is gone); that is not the CLI.
+enum AntigravityCLI {
+    /// Where Connect installs the CLI when there is no other copy (no Homebrew needed).
+    static var managedPath: String {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MacDashboard/antigravity-cli/antigravity").path
+    }
+
+    static func locate() -> String? {
+        var candidates: [String] = []
+        for prefix in ["/opt/homebrew", "/usr/local"] {
+            let room = "\(prefix)/Caskroom/antigravity-cli"
+            let versions = ((try? FileManager.default.contentsOfDirectory(atPath: room)) ?? []).sorted(by: >)
+            candidates += versions.map { "\(room)/\($0)/antigravity" }
+        }
+        candidates += Shell.searchPaths.map { "\($0)/agy" }
+        candidates.append(managedPath)
+        return candidates.first(where: isNativeExecutable)
+    }
+
+    /// The CLI is a native binary; the desktop app's launcher is a script.
+    private static func isNativeExecutable(_ path: String) -> Bool {
+        guard FileManager.default.isExecutableFile(atPath: path),
+              let handle = FileHandle(forReadingAtPath: path) else { return false }
+        defer { try? handle.close() }
+        let magic = [UInt8](handle.readData(ofLength: 4))
+        return magic == [0xCF, 0xFA, 0xED, 0xFE] || magic == [0xCA, 0xFE, 0xBA, 0xBE] || magic == [0xBE, 0xBA, 0xFE, 0xCA]
     }
 }

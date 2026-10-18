@@ -122,20 +122,38 @@ enum ProviderConnector {
             """
         case .gemini:
             steps = [
-                L.t("Antigravity CLI가 없으면 설치해요 (Homebrew)", "Install the Antigravity CLI if it's missing (Homebrew)"),
+                L.t("Antigravity CLI가 없으면 Google 공식 배포처에서 내려받아 체크섬을 확인하고 MacDashboard 폴더에 설치해요 (Homebrew 불필요, 기존 agy는 건드리지 않음)",
+                    "If the Antigravity CLI is missing, download it from Google's official feed, verify its checksum and install it in MacDashboard's folder (no Homebrew; an existing agy is left alone)"),
                 L.t("Antigravity를 실행해요. 안내에 따라 Google 계정으로 로그인한 뒤 /exit 를 입력하세요",
                     "Start Antigravity. Sign in with your Google account when asked, then type /exit"),
             ]
+            // Downloading directly avoids `brew install`, which fails when the desktop app's `agy`
+            // launcher already sits at /opt/homebrew/bin/agy.
             body = """
-            if ! command -v agy >/dev/null 2>&1; then
-              if command -v brew >/dev/null 2>&1; then
-                brew install --cask antigravity-cli
-              else
-                need_homebrew
-              fi
+            MANAGED="\(escape(AntigravityCLI.managedPath))"
+            find_cli() {
+              for p in /opt/homebrew/Caskroom/antigravity-cli/*/antigravity /usr/local/Caskroom/antigravity-cli/*/antigravity "$(command -v agy 2>/dev/null)" "$MANAGED"; do
+                if [ -n "$p" ] && [ -x "$p" ] && file -b "$p" | grep -q "Mach-O"; then echo "$p"; return 0; fi
+              done
+              return 1
+            }
+            CLI="$(find_cli)"
+            if [ -z "$CLI" ]; then
+              ARCH="$(uname -m)"; [ "$ARCH" = "x86_64" ] && ARCH="amd64"
+              MANIFEST="$(curl -fsSL "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/darwin_${ARCH}.json")" || fail
+              URL="$(printf '%s' "$MANIFEST" | plutil -extract url raw -o - -)"
+              SUM="$(printf '%s' "$MANIFEST" | plutil -extract sha512 raw -o - -)"
+              TMP="$(mktemp -d)"
+              curl -fL --progress-bar "$URL" -o "$TMP/cli.tar.gz" || fail
+              echo "$SUM  $TMP/cli.tar.gz" | shasum -a 512 -c - >/dev/null || fail
+              mkdir -p "$(dirname "$MANAGED")"
+              tar -xzf "$TMP/cli.tar.gz" -C "$(dirname "$MANAGED")" || fail
+              rm -rf "$TMP"
+              chmod +x "$MANAGED"
+              CLI="$(find_cli)"
             fi
-            require agy
-            agy
+            [ -n "$CLI" ] || fail
+            "$CLI"
             """
         }
 
@@ -153,6 +171,13 @@ enum ProviderConnector {
             read -r -p "\(escape(L.t("Enter를 누르면 닫혀요", "Press Enter to close")))"
             exit 1
           fi
+        }
+
+        fail() {
+          echo
+          echo "\(escape(L.t("설치에 실패했어요. 위 메시지를 확인해 주세요.", "Installation failed. Check the messages above.")))"
+          read -r -p "\(escape(L.t("Enter를 누르면 닫혀요", "Press Enter to close")))"
+          exit 1
         }
 
         need_homebrew() {
