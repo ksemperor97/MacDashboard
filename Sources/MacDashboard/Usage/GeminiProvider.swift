@@ -7,7 +7,7 @@ struct GeminiProvider: UsageProvider {
 
     func fetch() async throws -> ProviderUsage {
         guard let agy = Shell.find("agy") else {
-            throw UsageError.notLoggedIn(Loc("Antigravity CLI(agy) 설치 필요", "install Antigravity CLI (agy)"))
+            throw UsageError.notInstalled(Loc("Antigravity CLI", "Antigravity CLI"))
         }
         let data = try await Shell.run(agy, ["-p", "/quota", "--output-format", "json"], timeout: 90)
         guard let json = JSON.object(data),

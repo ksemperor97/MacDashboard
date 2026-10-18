@@ -56,7 +56,7 @@ struct ClaudeProvider: UsageProvider {
     }
 
     /// Only reached when Claude Code could not refresh either (e.g. the refresh token expired).
-    private var runClaudeHint: Loc { Loc("터미널에서 claude로 다시 로그인하세요", "sign in again with claude in Terminal") }
+    private var runClaudeHint: Loc { Loc("다시 로그인이 필요해요", "sign in again") }
 
     /// `claude -p /usage` refreshes an expired OAuth token as a side effect without calling a model
     /// (0 tokens, about 3 s). `claude auth status` does not refresh, so it can't be used for this.
@@ -80,12 +80,13 @@ struct ClaudeProvider: UsageProvider {
         do {
             data = try await Shell.run("/usr/bin/security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"], timeout: 15)
         } catch {
-            throw UsageError.notLoggedIn(Loc("터미널에서 claude 로그인 필요", "sign in with claude in Terminal"))
+            if Shell.find("claude") == nil { throw UsageError.notInstalled(Loc("Claude Code", "Claude Code")) }
+            throw UsageError.notLoggedIn(Loc("Claude Code", "Claude Code"))
         }
         guard let json = JSON.object(data),
               let oauth = json["claudeAiOauth"] as? [String: Any],
               let token = oauth["accessToken"] as? String
-        else { throw UsageError.notLoggedIn(Loc("Claude Code OAuth 정보 없음", "no Claude Code OAuth credentials")) }
+        else { throw UsageError.notLoggedIn(Loc("Claude Code", "Claude Code")) }
         return Credentials(accessToken: token, expiresAt: JSON.date(oauth["expiresAt"]),
                            subscriptionType: oauth["subscriptionType"] as? String)
     }

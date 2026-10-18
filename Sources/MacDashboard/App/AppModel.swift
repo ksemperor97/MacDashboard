@@ -70,6 +70,8 @@ final class AppModel {
     var diskReadHistory: [Double] = []
     var diskWriteHistory: [Double] = []
     var usage: [ProviderID: UsageState] = [:]
+    /// Services whose setup was opened in Terminal, with the time it was opened.
+    var connecting: [ProviderID: Date] = [:]
     var externalVolumes: [ExternalVolume] = []
     var launchAtLogin = SMAppService.mainApp.status == .enabled
     var loginError: String?
@@ -86,6 +88,7 @@ final class AppModel {
     @ObservationIgnored private var usageTimer: Timer?
     @ObservationIgnored private var usageResetTimer: Timer?
     @ObservationIgnored private var volumeTimer: Timer?
+    @ObservationIgnored private var connectTimer: Timer?
     @ObservationIgnored private var lastSensorRead = Date.distantPast
     @ObservationIgnored private let providers: [ProviderID: UsageProvider] = [
         .claude: ClaudeProvider(), .codex: CodexProvider(), .gemini: GeminiProvider(),
@@ -173,9 +176,9 @@ final class AppModel {
 
     var isRefreshingUsage: Bool { usage.values.contains { $0.loading } }
 
-    func refreshUsage(force: Bool, resetOnly: Bool = false) {
+    func refreshUsage(force: Bool, resetOnly: Bool = false, only: ProviderID? = nil) {
         let interval = TimeInterval(max(Prefs.d.integer(forKey: Prefs.usageInterval), 1) * 60)
-        for id in enabledProviders {
+        for id in enabledProviders where only == nil || id == only {
             var state = usage[id] ?? UsageState()
             if state.loading { continue }
             let needsReset = state.needsResetRefresh()
@@ -209,6 +212,43 @@ final class AppModel {
             }
         }
         scheduleUsageReset()
+    }
+
+    // MARK: Connect
+
+    /// Opens the service's setup in Terminal, then re-checks every 5 s (up to 10 min) so the card
+    /// fills in as soon as installation and sign-in finish.
+    func connect(_ id: ProviderID) {
+        do {
+            try ProviderConnector.openSetup(for: id)
+        } catch {
+            usage[id, default: UsageState()].error = error
+            return
+        }
+        connecting[id] = Date()
+        guard connectTimer == nil else { return }
+        connectTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pollConnections() }
+        }
+    }
+
+    private func pollConnections() {
+        let now = Date()
+        for (id, started) in connecting {
+            let state = usage[id] ?? UsageState()
+            // Done once a fetch that started after Connect was clicked has finished without error.
+            if !state.loading, state.error == nil, state.usage != nil, (state.lastAttempt ?? .distantPast) > started {
+                connecting[id] = nil
+            } else if now.timeIntervalSince(started) > 600 {
+                connecting[id] = nil
+            } else {
+                refreshUsage(force: true, only: id)
+            }
+        }
+        if connecting.isEmpty {
+            connectTimer?.invalidate()
+            connectTimer = nil
+        }
     }
 
     private func scheduleUsageReset() {

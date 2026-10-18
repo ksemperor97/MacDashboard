@@ -121,6 +121,7 @@ protocol UsageProvider {
 }
 
 enum UsageError: LocalizedError {
+    case notInstalled(Loc)
     case notLoggedIn(Loc)
     case tokenExpired(Loc)
     case http(Int)
@@ -128,6 +129,7 @@ enum UsageError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
+        case .notInstalled(let tool): tool.text + L.t(" 설치 필요", " not installed")
         case .notLoggedIn(let hint): L.t("로그인 정보 없음", "Not signed in") + " · " + hint.text
         case .tokenExpired(let hint): L.t("토큰 만료", "Token expired") + " · " + hint.text
         case .http(let code): L.t("서버 응답 오류", "Server error") + " (HTTP \(code))"

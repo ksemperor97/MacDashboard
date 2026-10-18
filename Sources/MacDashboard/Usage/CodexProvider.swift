@@ -17,7 +17,7 @@ struct CodexProvider: UsageProvider {
               let auth = JSON.object(data),
               let tokens = auth["tokens"] as? [String: Any],
               let accessToken = tokens["access_token"] as? String
-        else { throw UsageError.notLoggedIn(Loc("Codex에서 ChatGPT 계정으로 로그인하세요", "sign in to Codex with ChatGPT")) }
+        else { throw UsageError.notLoggedIn(Loc("Codex (ChatGPT 계정)", "Codex (ChatGPT account)")) }
 
         let claims = (tokens["id_token"] as? String).flatMap(JSON.jwtPayload)
         let email = claims?["email"] as? String

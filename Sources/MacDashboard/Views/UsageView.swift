@@ -22,6 +22,7 @@ struct UsageView: View {
                 VStack(spacing: 10) {
                     ForEach(model.enabledProviders) { id in
                         ProviderCard(id: id, state: model.usage[id] ?? UsageState(), now: context.date,
+                                     connecting: model.connecting[id] != nil, onConnect: { model.connect(id) },
                                      remaining: mode == "remaining", showAccount: showAccount,
                                      pinned: Prefs.pinned(from: pinnedRaw).contains(id)) { Prefs.togglePinned(id) }
                     }
@@ -72,6 +73,8 @@ private struct ProviderCard: View {
     let id: ProviderID
     let state: UsageState
     let now: Date
+    let connecting: Bool
+    let onConnect: () -> Void
     let remaining: Bool
     let showAccount: Bool
     let pinned: Bool
@@ -121,11 +124,13 @@ private struct ProviderCard: View {
                     Label(L.t("갱신 실패: ", "Refresh failed: ") + error.localizedDescription, systemImage: "exclamationmark.triangle")
                         .font(.system(size: 10))
                         .foregroundStyle(.orange)
+                    if ProviderConnector.canConnect(id, error: error) { ConnectRow(connecting: connecting, onConnect: onConnect) }
                 }
             } else if let error = state.error {
                 Label(error.localizedDescription, systemImage: "exclamationmark.triangle")
                     .font(.system(size: 11))
                     .foregroundStyle(.orange)
+                if ProviderConnector.canConnect(id, error: error) { ConnectRow(connecting: connecting, onConnect: onConnect) }
             } else {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
@@ -133,6 +138,37 @@ private struct ProviderCard: View {
                 }
             }
         }
+    }
+}
+
+/// "Connect" opens install + sign-in in Terminal; while it runs the card shows progress instead.
+private struct ConnectRow: View {
+    let connecting: Bool
+    let onConnect: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if connecting {
+                ProgressView().controlSize(.small)
+                Text(L.t("터미널에서 연결을 마치면 자동으로 갱신돼요", "Finish in Terminal; this updates automatically"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                Button(L.t("다시 열기", "Reopen"), action: onConnect)
+                    .buttonStyle(.link)
+                    .font(.system(size: 11))
+            } else {
+                Button(action: onConnect) {
+                    Label(L.t("연결하기", "Connect"), systemImage: "link")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                Text(L.t("설치와 로그인을 터미널에서 진행해요", "Installs and signs in via Terminal"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.top, 2)
     }
 }
 
