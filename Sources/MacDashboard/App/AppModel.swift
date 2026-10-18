@@ -72,6 +72,8 @@ final class AppModel {
     var usage: [ProviderID: UsageState] = [:]
     /// Services whose setup was opened in Terminal, with the time it was opened.
     var connecting: [ProviderID: Date] = [:]
+    /// Connects whose Terminal script never started (see `ProviderConnector.didStart`).
+    var connectStalled: Set<ProviderID> = []
     var externalVolumes: [ExternalVolume] = []
     var launchAtLogin = SMAppService.mainApp.status == .enabled
     var loginError: String?
@@ -226,6 +228,11 @@ final class AppModel {
             return
         }
         connecting[id] = Date()
+        connectStalled.remove(id)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+            guard let self, self.connecting[id] != nil, !ProviderConnector.didStart(id) else { return }
+            self.connectStalled.insert(id)
+        }
         guard connectTimer == nil else { return }
         connectTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.pollConnections() }
@@ -239,8 +246,10 @@ final class AppModel {
             // Done once a fetch that started after Connect was clicked has finished without error.
             if !state.loading, state.error == nil, state.usage != nil, (state.lastAttempt ?? .distantPast) > started {
                 connecting[id] = nil
+                connectStalled.remove(id)
             } else if now.timeIntervalSince(started) > 600 {
                 connecting[id] = nil
+                connectStalled.remove(id)
             } else {
                 refreshUsage(force: true, only: id)
             }

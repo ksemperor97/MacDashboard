@@ -32,6 +32,14 @@ enum Shell {
 
     /// Spawn a separate process group so a timeout also terminates pipe-holding children.
     /// All reads are nonblocking; completion never depends on pipe EOF after the deadline.
+    /// Empty folder used as the working directory of every command the app runs.
+    static let workingDirectory: URL = {
+        let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MacDashboard/cli", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }()
+
     static func run(_ path: String, _ args: [String], timeout: TimeInterval = 30) async throws -> Data {
         let cancellation = CommandCancellation()
         return try await withTaskCancellationHandler {
@@ -71,6 +79,10 @@ enum Shell {
             posix_spawnattr_destroy(&attributes)
         }
         posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0)
+        // Run in an empty folder. CLIs such as agy treat the working directory as their workspace
+        // and index it; from "/" (where Finder starts apps) that walks the whole disk and macOS
+        // asks the user to let MacDashboard into Music, Photos, Documents and so on.
+        posix_spawn_file_actions_addchdir(&actions, workingDirectory.path)
         posix_spawn_file_actions_adddup2(&actions, out[1], STDOUT_FILENO)
         posix_spawn_file_actions_adddup2(&actions, err[1], STDERR_FILENO)
         for fd in out + err { posix_spawn_file_actions_addclose(&actions, fd) }

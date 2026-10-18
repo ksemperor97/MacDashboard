@@ -22,7 +22,8 @@ struct UsageView: View {
                 VStack(spacing: 10) {
                     ForEach(model.enabledProviders) { id in
                         ProviderCard(id: id, state: model.usage[id] ?? UsageState(), now: context.date,
-                                     connecting: model.connecting[id] != nil, onConnect: { model.connect(id) },
+                                     connecting: model.connecting[id] != nil, stalled: model.connectStalled.contains(id),
+                                     onConnect: { model.connect(id) },
                                      remaining: mode == "remaining", showAccount: showAccount,
                                      pinned: Prefs.pinned(from: pinnedRaw).contains(id)) { Prefs.togglePinned(id) }
                     }
@@ -74,6 +75,7 @@ private struct ProviderCard: View {
     let state: UsageState
     let now: Date
     let connecting: Bool
+    let stalled: Bool
     let onConnect: () -> Void
     let remaining: Bool
     let showAccount: Bool
@@ -124,13 +126,13 @@ private struct ProviderCard: View {
                     Label(L.t("갱신 실패: ", "Refresh failed: ") + error.localizedDescription, systemImage: "exclamationmark.triangle")
                         .font(.system(size: 10))
                         .foregroundStyle(.orange)
-                    if ProviderConnector.canConnect(id, error: error) { ConnectRow(connecting: connecting, onConnect: onConnect) }
+                    if ProviderConnector.canConnect(id, error: error) { ConnectRow(id: id, connecting: connecting, stalled: stalled, onConnect: onConnect) }
                 }
             } else if let error = state.error {
                 Label(error.localizedDescription, systemImage: "exclamationmark.triangle")
                     .font(.system(size: 11))
                     .foregroundStyle(.orange)
-                if ProviderConnector.canConnect(id, error: error) { ConnectRow(connecting: connecting, onConnect: onConnect) }
+                if ProviderConnector.canConnect(id, error: error) { ConnectRow(id: id, connecting: connecting, stalled: stalled, onConnect: onConnect) }
             } else {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
@@ -142,30 +144,52 @@ private struct ProviderCard: View {
 }
 
 /// "Connect" opens install + sign-in in Terminal; while it runs the card shows progress instead.
+/// If the script never started, it offers to copy the command so it can be pasted into Terminal.
 private struct ConnectRow: View {
+    let id: ProviderID
     let connecting: Bool
+    let stalled: Bool
     let onConnect: () -> Void
+    @State private var copied = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            if connecting {
-                ProgressView().controlSize(.small)
-                Text(L.t("터미널에서 연결을 마치면 자동으로 갱신돼요", "Finish in Terminal; this updates automatically"))
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 4)
-                Button(L.t("다시 열기", "Reopen"), action: onConnect)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                if connecting {
+                    ProgressView().controlSize(.small)
+                    Text(L.t("터미널에서 연결을 마치면 자동으로 갱신돼요", "Finish in Terminal; this updates automatically"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 4)
+                    Button(L.t("다시 열기", "Reopen"), action: onConnect)
+                        .buttonStyle(.link)
+                        .font(.system(size: 11))
+                } else {
+                    Button(action: onConnect) {
+                        Label(L.t("연결하기", "Connect"), systemImage: "link")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    Text(L.t("설치와 로그인을 터미널에서 진행해요", "Installs and signs in via Terminal"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if connecting && stalled {
+                HStack(spacing: 8) {
+                    Text(copied
+                         ? L.t("복사했어요. 터미널에 붙여넣고 Enter를 누르세요", "Copied. Paste it into Terminal and press Enter")
+                         : L.t("터미널에서 시작되지 않았나요?", "Didn't it start in Terminal?"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 4)
+                    Button(L.t("명령어 복사", "Copy command")) {
+                        ProviderConnector.copyCommand(for: id)
+                        copied = true
+                    }
                     .buttonStyle(.link)
                     .font(.system(size: 11))
-            } else {
-                Button(action: onConnect) {
-                    Label(L.t("연결하기", "Connect"), systemImage: "link")
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                Text(L.t("설치와 로그인을 터미널에서 진행해요", "Installs and signs in via Terminal"))
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
             }
         }
         .padding(.top, 2)
