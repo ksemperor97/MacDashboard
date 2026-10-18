@@ -24,6 +24,7 @@ struct UsageView: View {
                         ProviderCard(id: id, state: model.usage[id] ?? UsageState(), now: context.date,
                                      connecting: model.connecting[id] != nil, stalled: model.connectStalled.contains(id),
                                      onConnect: { model.connect(id) },
+                                     onCheck: { model.refreshUsage(force: true, only: id) },
                                      remaining: mode == "remaining", showAccount: showAccount,
                                      pinned: Prefs.pinned(from: pinnedRaw).contains(id)) { Prefs.togglePinned(id) }
                     }
@@ -77,6 +78,7 @@ private struct ProviderCard: View {
     let connecting: Bool
     let stalled: Bool
     let onConnect: () -> Void
+    let onCheck: () -> Void
     let remaining: Bool
     let showAccount: Bool
     let pinned: Bool
@@ -127,12 +129,14 @@ private struct ProviderCard: View {
                         .font(.system(size: 10))
                         .foregroundStyle(.orange)
                     if ProviderConnector.canConnect(id, error: error) { ConnectRow(id: id, connecting: connecting, stalled: stalled, onConnect: onConnect) }
+                    if id == .gemini, let stage = AntigravitySetup.stage(for: error) { AntigravityGuide(stage: stage, onCheck: onCheck) }
                 }
             } else if let error = state.error {
                 Label(error.localizedDescription, systemImage: "exclamationmark.triangle")
                     .font(.system(size: 11))
                     .foregroundStyle(.orange)
                 if ProviderConnector.canConnect(id, error: error) { ConnectRow(id: id, connecting: connecting, stalled: stalled, onConnect: onConnect) }
+                if id == .gemini, let stage = AntigravitySetup.stage(for: error) { AntigravityGuide(stage: stage, onCheck: onCheck) }
             } else {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)

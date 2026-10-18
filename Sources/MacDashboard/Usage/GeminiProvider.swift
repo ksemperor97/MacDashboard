@@ -61,7 +61,7 @@ struct GeminiProvider: UsageProvider {
 /// Finds the real Antigravity CLI. The Antigravity desktop app can leave an `agy` shell script that
 /// launches /Applications/Antigravity.app (and breaks when the app is gone); that is not the CLI.
 enum AntigravityCLI {
-    /// Where Connect installs the CLI when there is no other copy (no Homebrew needed).
+    /// Where MacDashboard 1.2.7 installed the CLI; still used if present.
     static var managedPath: String {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("MacDashboard/antigravity-cli/antigravity").path
@@ -79,6 +79,15 @@ enum AntigravityCLI {
         return candidates.first(where: isNativeExecutable)
     }
 
+    /// An `agy` script that launches the Antigravity desktop app. It occupies the path Homebrew links
+    /// the CLI to, so `brew install --cask antigravity-cli` fails until it is removed.
+    static var desktopLauncherPath: String? {
+        Shell.searchPaths.map { "\($0)/agy" }.first { path in
+            guard !isNativeExecutable(path), let text = try? String(contentsOfFile: path, encoding: .utf8) else { return false }
+            return text.hasPrefix("#!") && text.contains("Antigravity.app")
+        }
+    }
+
     /// The CLI is a native binary; the desktop app's launcher is a script.
     private static func isNativeExecutable(_ path: String) -> Bool {
         guard FileManager.default.isExecutableFile(atPath: path),
@@ -86,5 +95,22 @@ enum AntigravityCLI {
         defer { try? handle.close() }
         let magic = [UInt8](handle.readData(ofLength: 4))
         return magic == [0xCF, 0xFA, 0xED, 0xFE] || magic == [0xCA, 0xFE, 0xBA, 0xBE] || magic == [0xBE, 0xBA, 0xFE, 0xCA]
+    }
+}
+
+/// What the Gemini card should walk the user through when Antigravity isn't ready.
+enum AntigravitySetup {
+    enum Stage { case install, signIn }
+
+    static func stage(for error: Error?) -> Stage? {
+        guard let error else { return nil }
+        if case UsageError.notInstalled = error { return .install }
+        // agy has no dedicated "not signed in" error; recognise it from its message.
+        if case ShellError.failed(_, _, let message) = error {
+            let text = message.lowercased()
+            let signIn = ["login", "log in", "sign in", "signin", "sign-in", "auth", "credential", "로그인"]
+            if signIn.contains(where: text.contains) { return .signIn }
+        }
+        return nil
     }
 }

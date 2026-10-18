@@ -21,7 +21,8 @@ A macOS menu bar app that shows system status and AI usage limits at a glance (S
 ### Features
 - **System popover**: CPU (user/system, per core, temperature), GPU (renderer/tiler, temperature), memory (app/wired/compressed/swap, memory pressure), internal and external disks (capacity, read/write speed), network (speed, IP, VPN indicator), fan rpm
 - **Usage popover**: 5-hour and weekly usage for Claude, ChatGPT (Codex) and Gemini (Antigravity), with time until each limit resets
-- **One-click connect**: if a service's CLI isn't installed or signed in, its card shows **Connect**. It opens Terminal, installs the CLI if needed (Homebrew, or the official installer / npm), starts the sign-in, and the card fills in by itself when you finish
+- **One-click connect**: if Claude Code or Codex isn't installed or signed in, its card shows **Connect**. It opens Terminal, installs the CLI if needed (Homebrew, or the official installer / npm), starts the sign-in, and the card fills in by itself when you finish
+- **Antigravity setup guide**: if the Antigravity CLI isn't installed or signed in, the Gemini card shows the steps (Homebrew recommended, with copy buttons and links to other install options). Install it your way; MacDashboard connects on its own a few seconds after the CLI works
 - **Settings**: choose menu bar items, pin one or more services to the badge, switch between used and remaining, refresh interval, hide IP and account emails, launch at login
 - **Languages**: English and Korean. Follows the system language by default; change it in Settings → General → Language
 
@@ -88,7 +89,8 @@ Service logo path data comes from [Lobe Icons](https://github.com/lobehub/lobe-i
 ### 기능
 - **시스템 팝오버**: CPU(사용자/시스템, 코어별, 온도), GPU(렌더러/타일러, 온도), 메모리(앱/와이어드/압축/스왑, 메모리 압력), 내장·외장 디스크(용량, 읽기/쓰기 속도), 네트워크(속도, IP, VPN 여부), 팬 rpm
 - **사용 한도 팝오버**: Claude, ChatGPT(Codex), Gemini(Antigravity)의 5시간/주간 사용률과 초기화까지 남은 시간
-- **원클릭 연결**: 서비스의 CLI가 설치되지 않았거나 로그인되지 않았으면 카드에 **연결하기** 버튼이 나와요. 누르면 터미널이 열리고, 필요하면 CLI를 설치한 뒤(Homebrew, 또는 공식 설치 스크립트/npm) 로그인을 시작해요. 로그인을 마치면 카드가 알아서 갱신돼요
+- **원클릭 연결**: Claude Code나 Codex가 설치되지 않았거나 로그인되지 않았으면 카드에 **연결하기** 버튼이 나와요. 누르면 터미널이 열리고, 필요하면 CLI를 설치한 뒤(Homebrew, 또는 공식 설치 스크립트/npm) 로그인을 시작해요. 로그인을 마치면 카드가 알아서 갱신돼요
+- **Antigravity 설치 안내**: Antigravity CLI가 설치되지 않았거나 로그인되지 않았으면 Gemini 카드에 설치·로그인 단계를 보여줘요(Homebrew 권장, 복사 버튼과 다른 설치 방법 링크 포함). 원하는 방법으로 설치하면 CLI가 동작하는 순간 몇 초 안에 알아서 연결돼요
 - **설정**: 메뉴 막대 항목, 배지에 표시할 서비스(여러 개 가능), 사용량/남은 양 표시, 갱신 주기, IP·계정 이메일 표시, 로그인 시 자동 실행
 - **언어**: 한국어와 영어. 기본값은 시스템 언어를 따르고, 설정 → 일반 → 언어에서 바꿀 수 있어요
 

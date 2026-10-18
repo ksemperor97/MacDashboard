@@ -7,20 +7,16 @@ import Foundation
 /// CLI's own sign-in (which opens the browser). The app polls until the service responds.
 enum ProviderConnector {
     /// Errors that a connect (install and/or sign-in) can fix.
+    /// Errors that a connect (install and/or sign-in) can fix. Gemini isn't handled here: its card
+    /// shows `AntigravityGuide` so the user installs the CLI the way they prefer.
     static func canConnect(_ id: ProviderID, error: Error?) -> Bool {
-        guard let error else { return false }
+        guard id != .gemini, let error else { return false }
         if let usageError = error as? UsageError {
             switch usageError {
             case .notInstalled, .notLoggedIn, .tokenExpired: return true
             case .http(401), .http(403): return true
             default: break
             }
-        }
-        // agy has no "not signed in" error of its own; only offer Connect when its message says so,
-        // so a slow or flaky run doesn't send the user through setup they don't need.
-        if id == .gemini, case ShellError.failed(_, _, let message) = error {
-            let text = message.lowercased()
-            return ["login", "log in", "sign in", "signin", "sign-in", "auth", "credential", "로그인"].contains { text.contains($0) }
         }
         return false
     }
@@ -121,40 +117,7 @@ enum ProviderConnector {
             codex login
             """
         case .gemini:
-            steps = [
-                L.t("Antigravity CLI가 없으면 Google 공식 배포처에서 내려받아 체크섬을 확인하고 MacDashboard 폴더에 설치해요 (Homebrew 불필요, 기존 agy는 건드리지 않음)",
-                    "If the Antigravity CLI is missing, download it from Google's official feed, verify its checksum and install it in MacDashboard's folder (no Homebrew; an existing agy is left alone)"),
-                L.t("Antigravity를 실행해요. 안내에 따라 Google 계정으로 로그인한 뒤 /exit 를 입력하세요",
-                    "Start Antigravity. Sign in with your Google account when asked, then type /exit"),
-            ]
-            // Downloading directly avoids `brew install`, which fails when the desktop app's `agy`
-            // launcher already sits at /opt/homebrew/bin/agy.
-            body = """
-            MANAGED="\(escape(AntigravityCLI.managedPath))"
-            find_cli() {
-              for p in /opt/homebrew/Caskroom/antigravity-cli/*/antigravity /usr/local/Caskroom/antigravity-cli/*/antigravity "$(command -v agy 2>/dev/null)" "$MANAGED"; do
-                if [ -n "$p" ] && [ -x "$p" ] && file -b "$p" | grep -q "Mach-O"; then echo "$p"; return 0; fi
-              done
-              return 1
-            }
-            CLI="$(find_cli)"
-            if [ -z "$CLI" ]; then
-              ARCH="$(uname -m)"; [ "$ARCH" = "x86_64" ] && ARCH="amd64"
-              MANIFEST="$(curl -fsSL "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/darwin_${ARCH}.json")" || fail
-              URL="$(printf '%s' "$MANIFEST" | plutil -extract url raw -o - -)"
-              SUM="$(printf '%s' "$MANIFEST" | plutil -extract sha512 raw -o - -)"
-              TMP="$(mktemp -d)"
-              curl -fL --progress-bar "$URL" -o "$TMP/cli.tar.gz" || fail
-              echo "$SUM  $TMP/cli.tar.gz" | shasum -a 512 -c - >/dev/null || fail
-              mkdir -p "$(dirname "$MANAGED")"
-              tar -xzf "$TMP/cli.tar.gz" -C "$(dirname "$MANAGED")" || fail
-              rm -rf "$TMP"
-              chmod +x "$MANAGED"
-              CLI="$(find_cli)"
-            fi
-            [ -n "$CLI" ] || fail
-            "$CLI"
-            """
+            return ""  // Gemini uses the in-card AntigravityGuide instead of a setup script
         }
 
         let numbered = steps.enumerated().map { "echo \"  \($0.offset + 1). \(escape($0.element))\"" }.joined(separator: "\n")

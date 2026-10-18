@@ -91,6 +91,7 @@ final class AppModel {
     @ObservationIgnored private var usageResetTimer: Timer?
     @ObservationIgnored private var volumeTimer: Timer?
     @ObservationIgnored private var connectTimer: Timer?
+    @ObservationIgnored private var setupWatchTimer: Timer?
     @ObservationIgnored private var lastSensorRead = Date.distantPast
     @ObservationIgnored private let providers: [ProviderID: UsageProvider] = [
         .claude: ClaudeProvider(), .codex: CodexProvider(), .gemini: GeminiProvider(),
@@ -104,6 +105,9 @@ final class AppModel {
                 self?.sensorReader = reader
                 self?.lastSensorRead = .distantPast
             }
+        }
+        setupWatchTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.watchAntigravitySetup() }
         }
         tick()
         scheduleTimer()
@@ -214,6 +218,21 @@ final class AppModel {
             }
         }
         scheduleUsageReset()
+    }
+
+    // MARK: Antigravity setup
+
+    /// While the Gemini card shows the setup guide, notice when the user has installed the CLI
+    /// (cheap file check every 5 s) or signed in (re-check every 30 s) and connect without a click.
+    private func watchAntigravitySetup() {
+        guard Prefs.isEnabled(.gemini), let state = usage[.gemini], !state.loading,
+              let stage = AntigravitySetup.stage(for: state.error) else { return }
+        switch stage {
+        case .install:
+            if AntigravityCLI.locate() != nil { refreshUsage(force: true, only: .gemini) }
+        case .signIn:
+            if Date().timeIntervalSince(state.lastAttempt ?? .distantPast) > 30 { refreshUsage(force: true, only: .gemini) }
+        }
     }
 
     // MARK: Connect
