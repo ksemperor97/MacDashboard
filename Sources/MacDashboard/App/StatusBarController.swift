@@ -175,13 +175,15 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             let speed = Format.speed(ai.headline?.generationTokensPerSecond)
             value = speed == "–" ? "…" : speed
         } else {
-            value = "Idle"
+            value = ai.canDetermineActivity ? "Idle" : "–"
         }
         let column = StatusColumn.metric("LLM", value)
         guard column.key != lastLocalKey else { return }
         lastLocalKey = column.key
         localItem.button?.image = StatusImage.render([[column]], pill: false)
-        localItem.button?.toolTip = L.t("로컬 AI 생성 속도 (토큰/초)", "Local AI generation speed (tokens/s)")
+        localItem.button?.toolTip = ai.canDetermineActivity || ai.isWorking
+            ? L.t("로컬 AI 생성 속도 (토큰/초) · 현재 모델의 최근 측정값", "Local AI generation speed (tokens/s) · latest measurement for this model")
+            : L.t("로컬 AI · 다른 앱의 생성 상태를 확인할 수 없어요", "Local AI · activity from other apps is unknown")
     }
 
     private func updateUsageItem() {

@@ -1,6 +1,11 @@
 import AppKit
 import SwiftUI
 
+// A dedicated child watches a pipe owned by the app, including when the app is killed abruptly.
+if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--local-ai-log-helper" {
+    exit(LocalAILogHelper.run(executable: CommandLine.arguments[2]))
+}
+
 if CommandLine.arguments.contains("--probe-sensors") {
     let keys = Sensors.allKeys()
     print("SMC keys:", keys.count)

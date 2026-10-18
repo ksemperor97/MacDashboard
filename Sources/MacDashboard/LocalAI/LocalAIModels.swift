@@ -54,6 +54,7 @@ struct SpeedSample: Identifiable, Codable, Equatable {
     var date: Date
     var engine: LocalEngineKind
     var model: String
+    var modelID: String?          // stable engine identifier; nil for older saved history
     var quantization: String?
     var source: Source
     var runID: UUID?               // benchmark runs group their steps

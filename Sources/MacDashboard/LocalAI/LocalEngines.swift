@@ -101,7 +101,7 @@ enum LocalEngines {
                                format: path.lowercased().hasSuffix(".gguf") ? "GGUF" : nil,
                                contextLength: (settings?["n_ctx"] as? Int) ?? (slots?.first?["n_ctx"] as? Int),
                                parallel: props["total_slots"] as? Int,
-                               state: busy ? "generating" : "idle")
+                               state: slots == nil ? "unknown" : (busy ? "generating" : "idle"))
         return LocalEngineStatus(kind: .llamaCpp, version: props["build_info"] as? String, models: [model])
     }
 
@@ -109,7 +109,7 @@ enum LocalEngines {
 
     /// Sends one prompt and returns the engine's own timings for it.
     static func measure(_ kind: LocalEngineKind, model: LocalModel, prompt: String, maxTokens: Int) async throws -> SpeedSample {
-        var sample = SpeedSample(date: Date(), engine: kind, model: model.name, quantization: model.quantization,
+        var sample = SpeedSample(date: Date(), engine: kind, model: model.name, modelID: model.id, quantization: model.quantization,
                                  source: .benchmark, promptTokens: 0, completionTokens: 0)
         switch kind {
         case .lmStudio:

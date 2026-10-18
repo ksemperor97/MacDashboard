@@ -70,7 +70,7 @@ struct LocalAIView: View {
                         .font(.system(size: 30, weight: .semibold).monospacedDigit())
                     Text(L.t("토큰/초 생성", "tok/s generation")).font(.system(size: 11)).foregroundStyle(.secondary)
                     Spacer()
-                    Sparkline(series: [(monitor.samples.suffix(30).compactMap(\.generationTokensPerSecond), .purple)], floor: 1,
+                    Sparkline(series: [(monitor.currentModelSamples.suffix(30).compactMap(\.generationTokensPerSecond), .purple)], floor: 1,
                               capacity: 30)
                         .frame(width: 140, height: 34)
                 }
@@ -87,8 +87,8 @@ struct LocalAIView: View {
                     }
                 }
             } else {
-                Text(L.t("아직 기록이 없어요. 아래에서 측정하거나 LM Studio로 요청을 보내면 여기 표시돼요.",
-                         "No data yet. Run a benchmark below, or send a request to LM Studio from any app."))
+                Text(L.t("현재 모델의 측정 기록이 없어요. 아래에서 측정하거나 LM Studio로 요청을 보내면 여기 표시돼요.",
+                         "No measurements for this model yet. Run a benchmark below, or send a request to LM Studio from any app."))
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -286,7 +286,9 @@ private struct ModelCard: View {
         switch state {
         case "generating": L.t("생성 중", "Generating")
         case "loading": L.t("불러오는 중", "Loading")
-        case "idle", "loaded": L.t("대기", "Idle")
+        case "idle": L.t("대기", "Idle")
+        case "loaded": L.t("로드됨 · 활동 상태 확인 불가", "Loaded · activity unknown")
+        case "unknown": L.t("활동 상태 확인 불가", "Activity unknown")
         default: state
         }
     }

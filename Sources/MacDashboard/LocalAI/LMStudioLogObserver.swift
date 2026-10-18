@@ -9,114 +9,102 @@ final class LMStudioLogObserver: @unchecked Sendable {
         case finished(SpeedSample)
     }
 
-    private let lock = NSLock()
+    // Launch, stop, restart and parsing all share one queue. A stop cannot race a pending launch.
+    private let queue = DispatchQueue(label: "MacDashboard.local-ai-log")
     private var process: Process?
+    private var ownerPipe: Pipe?
+    private var outputPipe: Pipe?
     private var buffer = Data()
     private var wanted = false
-    private var launching = false
+    private var streamID: UUID?
     private let onEvent: @Sendable (Event) -> Void
 
     init(onEvent: @escaping @Sendable (Event) -> Void) {
         self.onEvent = onEvent
     }
 
-    var isRunning: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return process?.isRunning == true
-    }
+    var isRunning: Bool { queue.sync { process?.isRunning == true } }
 
     func start() {
-        lock.lock()
-        wanted = true
-        let busy = process?.isRunning == true || launching
-        if !busy { launching = true }
-        lock.unlock()
-        guard !busy else { return }
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            Self.killOrphans()
-            self?.launch()
-            self?.lock.lock()
-            self?.launching = false
-            self?.lock.unlock()
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.wanted = true
+            self.launchIfNeeded()
         }
     }
 
     func stop() {
-        lock.lock()
-        wanted = false
-        let p = process
-        process = nil
-        lock.unlock()
-        p?.terminate()
+        queue.sync {
+            wanted = false
+            streamID = nil
+            outputPipe?.fileHandleForReading.readabilityHandler = nil
+            // Closing this pipe tells our helper to kill only its own log process group.
+            // A crash or SIGKILL closes it too, without scanning or killing other users' streams.
+            try? ownerPipe?.fileHandleForWriting.close()
+            ownerPipe = nil
+            outputPipe = nil
+            process = nil
+            buffer.removeAll(keepingCapacity: false)
+        }
     }
 
     static let arguments = ["log", "stream", "--source", "model", "--stats", "--json"]
 
-    /// A previous MacDashboard that was killed leaves its `lms log stream` behind, re-parented to
-    /// launchd (ppid 1), possibly with an older version's arguments. Those orphans are ours — a
-    /// user's own stream has their shell as parent — so they are stopped before a new one starts.
-    static func killOrphans() {
-        let ps = Process()
-        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
-        ps.arguments = ["-axo", "pid=,ppid=,command="]
-        let pipe = Pipe()
-        ps.standardOutput = pipe
-        ps.standardError = FileHandle.nullDevice
-        guard (try? ps.run()) != nil else { return }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        ps.waitUntilExit()
-        for line in String(decoding: data, as: UTF8.self).split(separator: "\n") {
-            let fields = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
-            guard fields.count == 3, fields[1] == "1", fields[2].contains("/.lmstudio/bin/lms log stream --source model"),
-                  let pid = Int32(fields[0]) else { continue }
-            kill(pid, SIGTERM)
-        }
-    }
-
-    private func launch() {
-        guard let lms = LocalEngines.lmsPath() else { return }
+    private func launchIfNeeded() {
+        guard wanted, process?.isRunning != true,
+              let lms = LocalEngines.lmsPath(), let executable = Bundle.main.executableURL else { return }
+        let id = UUID()
         let p = Process()
-        p.executableURL = URL(fileURLWithPath: lms)
-        p.arguments = Self.arguments
+        p.executableURL = executable
+        p.arguments = ["--local-ai-log-helper", lms]
         p.currentDirectoryURL = Shell.workingDirectory
-        let out = Pipe()
+        let out = Pipe(), owner = Pipe()
         p.standardOutput = out
         p.standardError = FileHandle.nullDevice
-        p.standardInput = FileHandle.nullDevice
+        p.standardInput = owner
+        streamID = id
+        buffer.removeAll(keepingCapacity: true)
         out.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             if data.isEmpty { handle.readabilityHandler = nil; return }
-            self?.consume(data)
+            self?.queue.async { [weak self] in
+                guard let self, self.wanted, self.streamID == id else { return }
+                self.consume(data)
+            }
         }
         p.terminationHandler = { [weak self] _ in
-            // Restart after LM Studio restarts or the stream drops, as long as it is still wanted.
-            DispatchQueue.global().asyncAfter(deadline: .now() + 10) {
-                guard let self else { return }
-                self.lock.lock()
-                let again = self.wanted && self.process?.isRunning != true
-                self.lock.unlock()
-                if again { self.launch() }
+            out.fileHandleForReading.readabilityHandler = nil
+            self?.queue.async { [weak self] in
+                guard let self, self.streamID == id else { return }
+                self.process = nil
+                self.ownerPipe = nil
+                self.outputPipe = nil
+                self.buffer.removeAll(keepingCapacity: true)
+                self.queue.asyncAfter(deadline: .now() + 10) { [weak self] in
+                    guard let self, self.streamID == id else { return }
+                    self.launchIfNeeded()
+                }
             }
         }
         do {
             try p.run()
-            lock.lock()
+            try? owner.fileHandleForReading.close()
             process = p
-            lock.unlock()
-        } catch {}
+            ownerPipe = owner
+            outputPipe = out
+        } catch {
+            out.fileHandleForReading.readabilityHandler = nil
+            streamID = nil
+        }
     }
 
     private func consume(_ data: Data) {
-        lock.lock()
         buffer.append(data)
-        var lines: [Data] = []
         while let newline = buffer.firstIndex(of: 0x0A) {
-            lines.append(buffer[buffer.startIndex..<newline])
+            let line = Data(buffer[buffer.startIndex..<newline])
             buffer.removeSubrange(buffer.startIndex...newline)
+            if let event = Self.parse(line) { onEvent(event) }
         }
-        lock.unlock()
-        for line in lines { if let event = Self.parse(line) { onEvent(event) } }
     }
 
     static func parse(_ line: Data) -> Event? {
@@ -127,7 +115,7 @@ final class LMStudioLogObserver: @unchecked Sendable {
         let prompt = stats["promptTokensCount"] as? Int ?? 0
         let ttft = JSON.double(stats["timeToFirstTokenSec"])
         var sample = SpeedSample(date: JSON.date(json["timestamp"]) ?? Date(), engine: .lmStudio,
-                                 model: data["modelIdentifier"] as? String ?? "?", source: .observed,
+                                 model: data["modelIdentifier"] as? String ?? "?", modelID: data["modelIdentifier"] as? String, source: .observed,
                                  promptTokens: prompt, completionTokens: stats["predictedTokensCount"] as? Int ?? 0)
         sample.timeToFirstToken = ttft
         sample.generationTokensPerSecond = JSON.double(stats["tokensPerSecond"])
