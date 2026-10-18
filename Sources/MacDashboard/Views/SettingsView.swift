@@ -14,6 +14,8 @@ struct SettingsView: View {
     @AppStorage(Prefs.usageInterval) private var interval = 5
     @AppStorage(Prefs.showAccount) private var showAccount = true
     @AppStorage(Prefs.showIP) private var showIP = true
+    @AppStorage(Prefs.menuLocalAI) private var menuLocalAI = true
+    @AppStorage(Prefs.observeLocalAI) private var observeLocalAI = true
     @AppStorage(Prefs.enabled(.claude)) private var claudeOn = true
     @AppStorage(Prefs.enabled(.codex)) private var codexOn = true
     @AppStorage(Prefs.enabled(.gemini)) private var geminiOn = true
@@ -55,6 +57,13 @@ struct SettingsView: View {
                 }
                 Toggle(L.t("계정 이메일 표시", "Show account email"), isOn: $showAccount)
             }
+            Section(L.t("로컬 AI", "Local AI")) {
+                Toggle(L.t("메뉴 막대에 로컬 AI 속도 표시", "Show local AI speed in the menu bar"), isOn: $menuLocalAI)
+                Toggle(L.t("LM Studio 요청 기록 (다른 앱 포함)", "Record LM Studio requests (from any app)"), isOn: $observeLocalAI)
+                Text(L.t("LM Studio 로그를 읽어 속도만 기록해요. 대화 내용은 저장하지 않아요. 켜 두면 메모리를 약 110MB 더 써요.",
+                         "Reads LM Studio's log and keeps only the timings, never the text. Uses about 110 MB more memory while on."))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section(L.t("일반", "General")) {
                 Picker(L.t("언어 (Language)", "Language"), selection: $language) {
                     ForEach(AppLanguage.allCases) { Text($0.pickerLabel).tag($0.rawValue) }
@@ -78,5 +87,7 @@ struct SettingsView: View {
         .onChange(of: pinnedRaw) { model.onTick?() }
         .onChange(of: mode) { model.onTick?() }
         .onChange(of: language) { model.onTick?() }
+        .onChange(of: menuLocalAI) { model.onTick?() }
+        .onChange(of: observeLocalAI) { Task { await model.localAI.refresh() } }
     }
 }

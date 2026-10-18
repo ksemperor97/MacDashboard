@@ -18,6 +18,7 @@ struct SensorReading {
     var cpuTemp: Double?
     var gpuTemp: Double?
     var fans: [FanReading] = []
+    var systemPower: Double?   // watts, whole machine (SMC PSTR)
 }
 
 /// Reads temperatures (IOHIDEventSystem + AppleSMC) and fan speeds (AppleSMC). No root needed.
@@ -44,6 +45,8 @@ final class Sensors {
             ?? average(hid.filter { $0.name.hasPrefix("PMU tdie") }.map(\.value))
         reading.gpuTemp = average(gpuKeys.compactMap(smcTemperature))
             ?? average(hid.filter { $0.name.localizedCaseInsensitiveContains("gpu") }.map(\.value))
+
+        if let watts = Sensors.smcNumber("PSTR"), watts > 0, watts < 2000 { reading.systemPower = watts }
 
         for i in 0..<fanCount {
             guard let rpm = Sensors.smcNumber("F\(i)Ac") else { continue }

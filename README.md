@@ -16,6 +16,10 @@ A macOS menu bar app that shows system status and AI usage limits at a glance (S
 |---|---|
 | ![System dashboard](docs/images/en/dashboard.png) | ![Usage limits](docs/images/en/usage.png) |
 
+| Local AI speed |
+|---|
+| ![Local AI speed](docs/images/en/local-ai.png) |
+
 > The screenshots were taken with IP address and account email display turned off.
 
 ### Features
@@ -23,6 +27,7 @@ A macOS menu bar app that shows system status and AI usage limits at a glance (S
 - **Usage popover**: 5-hour and weekly usage for Claude, ChatGPT (Codex) and Gemini (Antigravity), with time until each limit resets
 - **One-click connect**: if Claude Code or Codex isn't installed or signed in, its card shows **Connect**. It opens Terminal, installs the CLI if needed (Homebrew, or the official installer / npm), starts the sign-in, and the card fills in by itself when you finish
 - **Antigravity setup guide**: if the Antigravity CLI isn't installed or signed in, the Gemini card shows the steps (Homebrew recommended, with copy buttons and links to other install options). Install it your way; MacDashboard connects on its own a few seconds after the CLI works
+- **Local AI speed**: finds LM Studio, Ollama or a llama.cpp server running on this Mac and shows the loaded model (format, quantization, context, size), generation speed, time to first token and prompt processing speed. **Quick test** and **Context sweep** (≈1k / 8k / 32k-token inputs) benchmark the model; with LM Studio, requests from any app are recorded too (timings only, never text). It also flags memory pressure and shows GPU load, swap and system power. The menu bar shows the latest typical speed (`LLM 16.9`)
 - **Settings**: choose menu bar items, pin one or more services to the badge, switch between used and remaining, refresh interval, hide IP and account emails, launch at login
 - **Languages**: English and Korean. Follows the system language by default; change it in Settings → General → Language
 
@@ -84,6 +89,10 @@ Service logo path data comes from [Lobe Icons](https://github.com/lobehub/lobe-i
 |---|---|
 | ![시스템 대시보드](docs/images/ko/dashboard.png) | ![사용 한도](docs/images/ko/usage.png) |
 
+| 로컬 AI 속도 |
+|---|
+| ![로컬 AI 속도](docs/images/ko/local-ai.png) |
+
 > 스크린샷은 설정에서 IP 주소와 계정 이메일 표시를 끈 상태예요.
 
 ### 기능
@@ -91,6 +100,7 @@ Service logo path data comes from [Lobe Icons](https://github.com/lobehub/lobe-i
 - **사용 한도 팝오버**: Claude, ChatGPT(Codex), Gemini(Antigravity)의 5시간/주간 사용률과 초기화까지 남은 시간
 - **원클릭 연결**: Claude Code나 Codex가 설치되지 않았거나 로그인되지 않았으면 카드에 **연결하기** 버튼이 나와요. 누르면 터미널이 열리고, 필요하면 CLI를 설치한 뒤(Homebrew, 또는 공식 설치 스크립트/npm) 로그인을 시작해요. 로그인을 마치면 카드가 알아서 갱신돼요
 - **Antigravity 설치 안내**: Antigravity CLI가 설치되지 않았거나 로그인되지 않았으면 Gemini 카드에 설치·로그인 단계를 보여줘요(Homebrew 권장, 복사 버튼과 다른 설치 방법 링크 포함). 원하는 방법으로 설치하면 CLI가 동작하는 순간 몇 초 안에 알아서 연결돼요
+- **로컬 AI 속도**: 이 Mac에서 실행 중인 LM Studio, Ollama, llama.cpp 서버를 찾아 로드된 모델(형식, 양자화, 컨텍스트, 크기)과 생성 속도, 첫 토큰까지 시간, 입력 처리 속도를 보여줘요. **빠른 측정**과 **컨텍스트별 측정**(입력 약 1k / 8k / 32k 토큰)으로 직접 측정할 수 있고, LM Studio는 다른 앱의 요청도 기록해요(속도만 저장하고 대화 내용은 저장하지 않아요). 메모리 압력 경고와 GPU 사용률, 스왑, 시스템 전력도 함께 보여줘요. 메뉴 막대에는 최근 일반 요청의 속도가 나와요(`LLM 16.9`)
 - **설정**: 메뉴 막대 항목, 배지에 표시할 서비스(여러 개 가능), 사용량/남은 양 표시, 갱신 주기, IP·계정 이메일 표시, 로그인 시 자동 실행
 - **언어**: 한국어와 영어. 기본값은 시스템 언어를 따르고, 설정 → 일반 → 언어에서 바꿀 수 있어요
 

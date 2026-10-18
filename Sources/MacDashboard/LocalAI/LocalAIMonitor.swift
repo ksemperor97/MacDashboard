@@ -1,0 +1,195 @@
+import Foundation
+import Observation
+
+/// State behind the Local AI popover: which engine/model is loaded, measured speeds (benchmarks
+/// and observed requests, kept on disk), and a running benchmark.
+@MainActor
+@Observable
+final class LocalAIMonitor {
+    static let historyLimit = 300
+    static let contextSweep = [1_000, 8_000, 32_000]
+
+    var status: LocalEngineStatus?
+    var samples: [SpeedSample] = []        // oldest first
+    var benchmark: BenchmarkProgress?
+    var lastError: String?
+
+    /// Faster, more detailed polling while the popover is visible.
+    var popoverOpen = false {
+        didSet {
+            guard popoverOpen != oldValue else { return }
+            scheduleTimer()
+            if popoverOpen { Task { await refresh() } }
+        }
+    }
+
+    @ObservationIgnored var onChange: (() -> Void)?
+    @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private var benchmarkTask: Task<Void, Never>?
+    @ObservationIgnored private var observer: LMStudioLogObserver?
+
+    private static var historyURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MacDashboard/local-ai-history.json")
+    }
+
+    func start() {
+        if let data = try? Data(contentsOf: Self.historyURL),
+           let saved = try? JSONDecoder().decode([SpeedSample].self, from: data) {
+            samples = saved
+        }
+        scheduleTimer()
+        Task { await refresh() }
+    }
+
+    private func scheduleTimer() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: popoverOpen ? 5 : 20, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { _ = Task { await self?.refresh() } }
+        }
+    }
+
+    func refresh() async {
+        let detected = await LocalEngines.detect(detailed: popoverOpen)
+        if detected != status { status = detected }
+        updateObserver()
+        onChange?()
+    }
+
+    // MARK: Observed requests
+
+    private func updateObserver() {
+        let want = status?.kind == .lmStudio && Prefs.d.bool(forKey: Prefs.observeLocalAI)
+        if want {
+            if observer == nil {
+                observer = LMStudioLogObserver { [weak self] sample in
+                    Task { @MainActor in self?.record(observed: sample) }
+                }
+            }
+            observer?.start()
+        } else {
+            observer?.stop()
+        }
+    }
+
+    private func record(observed sample: SpeedSample) {
+        // MacDashboard's own benchmark requests also appear in the log; keep only the benchmark copy.
+        guard benchmark == nil else { return }
+        var s = sample
+        if let model = status?.models.first(where: { $0.id == s.model }) {
+            s.model = model.name
+            s.quantization = model.quantization
+        }
+        append(s)
+        Task { await refresh() }   // the model just finished; update its status right away
+    }
+
+    private func append(_ sample: SpeedSample) {
+        samples.append(sample)
+        if samples.count > Self.historyLimit { samples.removeFirst(samples.count - Self.historyLimit) }
+        save()
+        onChange?()
+    }
+
+    private func save() {
+        let url = Self.historyURL
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let data = try? JSONEncoder().encode(samples) { try? data.write(to: url, options: .atomic) }
+    }
+
+    /// Called when the app quits so the log stream child doesn't outlive it.
+    func stop() {
+        observer?.stop()
+        benchmarkTask?.cancel()
+    }
+
+    func clearHistory() {
+        samples.removeAll()
+        save()
+        onChange?()
+    }
+
+    // MARK: Benchmark
+
+    var activeModel: LocalModel? { status?.models.first }
+
+    /// Quick run: one short prompt. Sweep: the same at ~1k / 8k / 32k prompt tokens (capped by the
+    /// loaded context), which shows how prompt processing and generation slow down with context.
+    func runBenchmark(sweep: Bool) {
+        guard benchmark == nil, let kind = status?.kind, let model = activeModel else {
+            lastError = LocalAIError.noModel.localizedDescription
+            return
+        }
+        let maxTokens = 128
+        var sizes = sweep ? Self.contextSweep : [0]
+        if let ctx = model.contextLength { sizes = sizes.filter { $0 + maxTokens + 512 <= ctx } }
+        if sizes.isEmpty { sizes = [0] }
+        let runID = UUID()
+        lastError = nil
+        benchmark = BenchmarkProgress(step: 0, total: sizes.count + 1, label: L.t("모델 준비 중…", "Warming up…"))
+        onChange?()
+
+        benchmarkTask = Task { [weak self] in
+            // A tiny warm-up request so the first measured step doesn't include model wake-up.
+            _ = try? await LocalEngines.measure(kind, model: model, prompt: LocalEngines.prompt(approximateTokens: 0), maxTokens: 8)
+            for (i, size) in sizes.enumerated() {
+                if Task.isCancelled { break }
+                await MainActor.run {
+                    self?.benchmark = BenchmarkProgress(
+                        step: i + 1, total: sizes.count + 1,
+                        label: size == 0 ? L.t("짧은 프롬프트 측정 중…", "Measuring a short prompt…")
+                                         : L.t("입력 \(Format.tokens(size)) 토큰 측정 중…", "Measuring \(Format.tokens(size))-token input…"))
+                    self?.onChange?()
+                }
+                do {
+                    var sample = try await LocalEngines.measure(kind, model: model,
+                                                                prompt: LocalEngines.prompt(approximateTokens: size),
+                                                                maxTokens: maxTokens)
+                    sample.runID = runID
+                    sample.contextTokens = size == 0 ? nil : size
+                    await MainActor.run { self?.append(sample) }
+                } catch {
+                    await MainActor.run { self?.lastError = error.localizedDescription }
+                    break
+                }
+            }
+            await MainActor.run {
+                self?.benchmark = nil
+                self?.onChange?()
+            }
+        }
+    }
+
+    func cancelBenchmark() {
+        benchmarkTask?.cancel()
+        benchmark = nil
+        onChange?()
+    }
+
+    // MARK: Derived
+
+    var latest: SpeedSample? { samples.last }
+
+    /// The most recent typical request for the menu bar: long-context sweep steps are skipped so a
+    /// 32k-token benchmark doesn't stand in for everyday speed.
+    var headline: SpeedSample? {
+        samples.last { ($0.contextTokens ?? 0) <= 1_000 } ?? samples.last
+    }
+
+    var latestRun: [SpeedSample] {
+        guard let id = samples.last(where: { $0.source == .benchmark })?.runID else { return [] }
+        return samples.filter { $0.runID == id }
+    }
+
+    /// Best short-prompt result per model + quantization, newest first.
+    var comparison: [(model: String, quantization: String?, generation: Double, prompt: Double?, date: Date)] {
+        var best: [String: SpeedSample] = [:]
+        for s in samples where s.source == .benchmark && (s.contextTokens ?? 0) <= 1_000 {
+            let key = "\(s.engine.rawValue)|\(s.model)|\(s.quantization ?? "")"
+            if (s.generationTokensPerSecond ?? 0) > (best[key]?.generationTokensPerSecond ?? -1) { best[key] = s }
+        }
+        return best.values.sorted { $0.date > $1.date }.prefix(6).map {
+            ($0.model, $0.quantization, $0.generationTokensPerSecond ?? 0, $0.promptTokensPerSecond, $0.date)
+        }
+    }
+}

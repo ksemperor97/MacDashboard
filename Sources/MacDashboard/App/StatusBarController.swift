@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Two status items: the AI usage badge and the system metrics strip. Each opens its own popover.
+/// Status items for local AI speed, the AI usage badge and the system metrics strip, each with
+/// its own popover.
 @MainActor
 final class StatusBarController: NSObject, NSPopoverDelegate {
     private let model: AppModel
@@ -9,8 +10,11 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private let usageItem: NSStatusItem
     private let systemPopover = NSPopover()
     private let usagePopover = NSPopover()
+    private let localItem: NSStatusItem
+    private let localPopover = NSPopover()
     private var lastSystemKey = ""
     private var lastUsageKey = ""
+    private var lastLocalKey = ""
     private var appearanceObservation: NSKeyValueObservation?
     private var menuBarIsDark: Bool?
     var openSettings: (() -> Void)?
@@ -20,17 +24,20 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         // Items added later sit further left, so the usage badge ends up left of the metrics.
         systemItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         usageItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        localItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
+        localItem.autosaveName = "MacDashboard.localAI"
         systemItem.autosaveName = "MacDashboard.system"
         usageItem.autosaveName = "MacDashboard.usage"
 
-        for popover in [systemPopover, usagePopover] {
+        for popover in [systemPopover, usagePopover, localPopover] {
             popover.behavior = .transient
             popover.animates = true
             popover.delegate = self
         }
 
-        for (item, action) in [(systemItem, #selector(toggleSystem)), (usageItem, #selector(toggleUsage))] {
+        for (item, action) in [(systemItem, #selector(toggleSystem)), (usageItem, #selector(toggleUsage)),
+                               (localItem, #selector(toggleLocal))] {
             item.button?.target = self
             item.button?.action = action
             item.button?.imagePosition = .imageOnly
@@ -53,13 +60,18 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     /// keep re-rendering on every sample.
     private func makeContent(for popover: NSPopover, screen: NSScreen?) -> NSViewController {
         let settings: () -> Void = { [weak self] in self?.showSettings() }
-        let root = popover === systemPopover
-            ? AnyView(SystemDashboardView(openSettings: settings).environment(model))
-            : AnyView(UsageView(openSettings: settings).environment(model))
+        let root: AnyView
+        if popover === systemPopover {
+            root = AnyView(SystemDashboardView(openSettings: settings).environment(model))
+        } else if popover === localPopover {
+            root = AnyView(LocalAIView(monitor: model.localAI, openSettings: settings).environment(model))
+        } else {
+            root = AnyView(UsageView(openSettings: settings).environment(model))
+        }
         // Leave room for the popover arrow and margins above the Dock/visible screen edge.
         let maximumHeight = max(1, (screen?.visibleFrame.height ?? 700) - 24)
         let host = NSHostingController(rootView: HeightLimitedScrollView(
-            width: popover === systemPopover ? 460 : 400, maximumHeight: maximumHeight
+            width: popover === usagePopover ? 400 : 460, maximumHeight: maximumHeight
         ) { root })
         host.sizingOptions = .preferredContentSize
         return host
@@ -74,6 +86,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         toggle(usagePopover, from: usageItem)
     }
 
+    @objc private func toggleLocal() { toggle(localPopover, from: localItem) }
+
     private func toggle(_ popover: NSPopover, from item: NSStatusItem) {
         if popover.isShown {
             // A popover that reports shown but has no visible window is reopened instead of "closed".
@@ -83,7 +97,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             }
             popover.close()
         }
-        [systemPopover, usagePopover].filter { $0 !== popover && $0.isShown }.forEach { $0.performClose(nil) }
+        [systemPopover, usagePopover, localPopover].filter { $0 !== popover && $0.isShown }.forEach { $0.performClose(nil) }
         guard let button = item.button else { return }
         popover.contentViewController = makeContent(for: popover, screen: button.window?.screen ?? NSScreen.main)
         NSApp.activate()
@@ -92,23 +106,30 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     }
 
     func open(_ which: String) {
-        if which == "usage" { toggleUsage() } else { toggleSystem() }
+        switch which {
+        case "usage": toggleUsage()
+        case "local": toggleLocal()
+        default: toggleSystem()
+        }
     }
 
     private func showSettings() {
         systemPopover.performClose(nil)
         usagePopover.performClose(nil)
+        localPopover.performClose(nil)
         openSettings?()
     }
 
     func popoverDidShow(_ notification: Notification) {
         model.popoverOpen = true
         if (notification.object as? NSPopover) === systemPopover { model.tick() }
+        if (notification.object as? NSPopover) === localPopover { model.localAI.popoverOpen = true }
     }
 
     func popoverDidClose(_ notification: Notification) {
         (notification.object as? NSPopover)?.contentViewController = nil
-        model.popoverOpen = systemPopover.isShown || usagePopover.isShown
+        model.popoverOpen = systemPopover.isShown || usagePopover.isShown || localPopover.isShown
+        model.localAI.popoverOpen = localPopover.isShown
     }
 
     // MARK: Rendering
@@ -116,8 +137,10 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     func update() {
         systemItem.button?.setAccessibilityLabel(L.t("시스템 상태", "System Status"))
         usageItem.button?.setAccessibilityLabel(L.t("AI 사용 한도", "AI Usage Limits"))
+        localItem.button?.setAccessibilityLabel(L.t("로컬 AI 속도", "Local AI speed"))
         updateSystemItem()
         updateUsageItem()
+        updateLocalItem()
     }
 
     private func updateSystemItem() {
@@ -137,6 +160,19 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         systemItem.button?.image = columns.isEmpty
             ? NSImage(systemSymbolName: "gauge.with.dots.needle.33percent", accessibilityDescription: "MacDashboard")
             : StatusImage.render([columns], pill: false)
+    }
+
+    /// "LLM / 16.2" (last measured generation tok/s); shown only while a local engine is running.
+    private func updateLocalItem() {
+        let ai = model.localAI
+        localItem.isVisible = Prefs.d.bool(forKey: Prefs.menuLocalAI) && ai.status != nil
+        guard localItem.isVisible else { return }
+        let value = ai.benchmark != nil ? "…" : Format.speed(ai.headline?.generationTokensPerSecond)
+        let column = StatusColumn.metric("LLM", value)
+        guard column.key != lastLocalKey else { return }
+        lastLocalKey = column.key
+        localItem.button?.image = StatusImage.render([[column]], pill: false)
+        localItem.button?.toolTip = L.t("로컬 AI 생성 속도 (토큰/초)", "Local AI generation speed (tokens/s)")
     }
 
     private func updateUsageItem() {

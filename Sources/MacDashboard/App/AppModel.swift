@@ -17,13 +17,15 @@ enum Prefs {
     static let showAccount = "usage.showAccount"
     static let showIP = "network.showIP"
     static let language = "app.language"         // AppLanguage raw value
+    static let menuLocalAI = "menu.localAI"
+    static let observeLocalAI = "localAI.observe"   // follow LM Studio's log for other apps' requests
     static func enabled(_ id: ProviderID) -> String { "usage.enabled.\(id.rawValue)" }
 
     static func register() {
         var defaults: [String: Any] = [
             menuCPU: true, menuMemory: true, menuNetwork: true, menuTemp: false, menuDisk: false, menuUsage: true,
             pinnedProvider: ProviderID.claude.rawValue, usageMode: "used", usageInterval: 5, showAccount: true, showIP: true,
-            language: AppLanguage.system.rawValue,
+            language: AppLanguage.system.rawValue, menuLocalAI: true, observeLocalAI: true,
         ]
         for id in ProviderID.allCases { defaults[enabled(id)] = true }
         UserDefaults.standard.register(defaults: defaults)
@@ -70,6 +72,7 @@ final class AppModel {
     var diskReadHistory: [Double] = []
     var diskWriteHistory: [Double] = []
     var usage: [ProviderID: UsageState] = [:]
+    @ObservationIgnored let localAI = LocalAIMonitor()
     /// Services whose setup was opened in Terminal, with the time it was opened.
     var connecting: [ProviderID: Date] = [:]
     /// Connects whose Terminal script never started (see `ProviderConnector.didStart`).
@@ -106,6 +109,8 @@ final class AppModel {
                 self?.lastSensorRead = .distantPast
             }
         }
+        localAI.onChange = { [weak self] in self?.onTick?() }
+        localAI.start()
         setupWatchTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.watchAntigravitySetup() }
         }

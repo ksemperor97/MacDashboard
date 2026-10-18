@@ -28,6 +28,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        model.localAI.stop()
+    }
+
     private func updateSettingsTitle() {
         let title = L.t("MacDashboard 설정", "MacDashboard Settings")
         if settingsWindow?.title != title { settingsWindow?.title = title }

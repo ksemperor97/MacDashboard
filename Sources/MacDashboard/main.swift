@@ -4,7 +4,7 @@ import SwiftUI
 if CommandLine.arguments.contains("--probe-sensors") {
     let keys = Sensors.allKeys()
     print("SMC keys:", keys.count)
-    for k in keys where k.hasPrefix("T") || k.hasPrefix("F") {
+    for k in keys where k.hasPrefix("T") || k.hasPrefix("F") || k.hasPrefix("P") {
         if let v = Sensors.smcNumber(k), let raw = Sensors.smcRaw(k) { print(k, raw.type, String(format: "%.2f", v)) }
     }
     print("--- HID")

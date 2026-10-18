@@ -97,6 +97,28 @@ enum Format {
         return L.t("\(u) 사용 · \(a) 남음 / \(t)", "\(u) used · \(a) free / \(t)")
     }
 
+    /// "512", "8k", "32k", "1,234"
+    static func tokens(_ n: Int) -> String {
+        if n >= 1000, n % 1000 == 0 { return "\(n / 1000)k" }
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        return f.string(from: NSNumber(value: n)) ?? "\(n)"
+    }
+
+    /// Tokens per second with one decimal: "16.2"
+    static func speed(_ tps: Double?) -> String {
+        guard let tps, tps.isFinite, tps > 0 else { return "–" }
+        return tps >= 100 ? "\(Int(tps.rounded()))" : String(format: "%.1f", tps)
+    }
+
+    /// "0.42s", "4.41s", "12.3s", "128s"
+    static func seconds(_ s: Double?) -> String {
+        guard let s, s.isFinite, s >= 0 else { return "–" }
+        if s < 10 { return String(format: "%.2fs", s) }
+        if s < 100 { return String(format: "%.1fs", s) }
+        return "\(Int(s.rounded()))s"
+    }
+
     static func clock(_ date: Date) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: L.isKorean ? "ko_KR" : "en_US")
