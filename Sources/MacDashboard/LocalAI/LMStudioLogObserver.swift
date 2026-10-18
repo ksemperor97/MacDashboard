@@ -54,8 +54,8 @@ final class LMStudioLogObserver: @unchecked Sendable {
     static let arguments = ["log", "stream", "--source", "model", "--stats", "--json"]
 
     /// A previous MacDashboard that was killed leaves its `lms log stream` behind, re-parented to
-    /// launchd (ppid 1). Those orphans are ours — a user's own stream has their shell as parent —
-    /// so they are stopped before a new one starts.
+    /// launchd (ppid 1), possibly with an older version's arguments. Those orphans are ours — a
+    /// user's own stream has their shell as parent — so they are stopped before a new one starts.
     static func killOrphans() {
         let ps = Process()
         ps.executableURL = URL(fileURLWithPath: "/bin/ps")
@@ -66,10 +66,10 @@ final class LMStudioLogObserver: @unchecked Sendable {
         guard (try? ps.run()) != nil else { return }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         ps.waitUntilExit()
-        let ours = "lms " + arguments.joined(separator: " ")
         for line in String(decoding: data, as: UTF8.self).split(separator: "\n") {
             let fields = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
-            guard fields.count == 3, fields[1] == "1", fields[2].hasSuffix(ours), let pid = Int32(fields[0]) else { continue }
+            guard fields.count == 3, fields[1] == "1", fields[2].contains("/.lmstudio/bin/lms log stream --source model"),
+                  let pid = Int32(fields[0]) else { continue }
             kill(pid, SIGTERM)
         }
     }

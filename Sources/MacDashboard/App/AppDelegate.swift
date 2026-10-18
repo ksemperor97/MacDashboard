@@ -4,11 +4,22 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = AppModel()
+    private var terminateSignal: DispatchSourceSignal?
     private var statusBar: StatusBarController?
     private var settingsWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Prefs.register()
+        // `kill`, logout and app updates send SIGTERM, which skips applicationWillTerminate. Stop the
+        // LM Studio log stream child first so it isn't left running on its own.
+        signal(SIGTERM, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        source.setEventHandler { [weak self] in
+            MainActor.assumeIsolated { self?.model.localAI.stop() }
+            exit(0)
+        }
+        source.resume()
+        terminateSignal = source
         let controller = StatusBarController(model: model)
         controller.openSettings = { [weak self] in self?.showSettings() }
         statusBar = controller
