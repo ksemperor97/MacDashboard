@@ -17,7 +17,10 @@ struct LocalAIView: View {
                                     "\(status.kind.displayName) is running but no model is loaded."))
                         .font(.system(size: 12)).foregroundStyle(.secondary) }
                 }
-                ForEach(status.models) { ModelCard(model: $0) }
+                ForEach(status.models) { m in
+                    // The log stream knows about a running request before `lms ps` does.
+                    ModelCard(model: monitor.isWorking ? { var w = m; w.state = "generating"; return w }() : m)
+                }
                 speedCard
                 benchmarkCard
                 resourceCard

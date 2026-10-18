@@ -162,12 +162,21 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             : StatusImage.render([columns], pill: false)
     }
 
-    /// "LLM / 16.2" (last measured generation tok/s); shown only while a local engine is running.
+    /// "LLM / Idle" while nothing runs; "LLM / 16.2" (generation tok/s) while a model is working and
+    /// for a few seconds after a request finishes. Shown only while a local engine is running.
     private func updateLocalItem() {
         let ai = model.localAI
         localItem.isVisible = Prefs.d.bool(forKey: Prefs.menuLocalAI) && ai.status != nil
         guard localItem.isVisible else { return }
-        let value = ai.benchmark != nil ? "…" : Format.speed(ai.headline?.generationTokensPerSecond)
+        let justFinished = ai.lastFinishedAt.map { Date().timeIntervalSince($0) < 15 } ?? false
+        let value: String
+        if ai.isWorking || justFinished {
+            // Engines don't report speed mid-request, so show the most recent typical request's.
+            let speed = Format.speed(ai.headline?.generationTokensPerSecond)
+            value = speed == "–" ? "…" : speed
+        } else {
+            value = "Idle"
+        }
         let column = StatusColumn.metric("LLM", value)
         guard column.key != lastLocalKey else { return }
         lastLocalKey = column.key

@@ -13,6 +13,11 @@ final class LocalAIMonitor {
     var samples: [SpeedSample] = []        // oldest first
     var benchmark: BenchmarkProgress?
     var lastError: String?
+    /// LM Studio requests that have started but not finished (from the log stream).
+    var activeRequests = 0
+    /// llama.cpp reports busy slots directly.
+    var engineBusy = false
+    var lastFinishedAt: Date?
 
     /// Faster, more detailed polling while the popover is visible.
     var popoverOpen = false {
@@ -27,6 +32,8 @@ final class LocalAIMonitor {
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var benchmarkTask: Task<Void, Never>?
     @ObservationIgnored private var observer: LMStudioLogObserver?
+    @ObservationIgnored private var busyTimer: Timer?
+    @ObservationIgnored private var lastStartedAt: Date?
 
     private static var historyURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -39,7 +46,28 @@ final class LocalAIMonitor {
             samples = saved
         }
         scheduleTimer()
+        // Working/idle needs to be quick: re-check every 2 s (cheap — no CLI calls).
+        busyTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { _ = Task { await self?.checkBusy() } }
+        }
         Task { await refresh() }
+    }
+
+    /// True while a model is generating: an LM Studio request is in flight, llama.cpp has a busy
+    /// slot, or a benchmark is running.
+    var isWorking: Bool { activeRequests > 0 || engineBusy || benchmark != nil }
+
+    private func checkBusy() async {
+        // A request whose finish event never arrived (cancelled, crashed) shouldn't keep us "working".
+        if activeRequests > 0, let started = lastStartedAt, Date().timeIntervalSince(started) > 600 {
+            activeRequests = 0
+        }
+        var busy = false
+        if status?.kind == .llamaCpp, let fresh = await LocalEngines.status(of: .llamaCpp, detailed: false) {
+            busy = fresh.models.contains { $0.state == "generating" }
+        }
+        if busy != engineBusy { engineBusy = busy }
+        onChange?()   // also lets the menu bar fall back to Idle once the after-glow ends
     }
 
     private func scheduleTimer() {
@@ -62,8 +90,13 @@ final class LocalAIMonitor {
         let want = status?.kind == .lmStudio && Prefs.d.bool(forKey: Prefs.observeLocalAI)
         if want {
             if observer == nil {
-                observer = LMStudioLogObserver { [weak self] sample in
-                    Task { @MainActor in self?.record(observed: sample) }
+                observer = LMStudioLogObserver { [weak self] event in
+                    Task { @MainActor in
+                        switch event {
+                        case .started: self?.requestStarted()
+                        case .finished(let sample): self?.record(observed: sample)
+                        }
+                    }
                 }
             }
             observer?.start()
@@ -72,9 +105,17 @@ final class LocalAIMonitor {
         }
     }
 
+    private func requestStarted() {
+        activeRequests += 1
+        lastStartedAt = Date()
+        onChange?()
+    }
+
     private func record(observed sample: SpeedSample) {
+        activeRequests = max(activeRequests - 1, 0)
+        lastFinishedAt = Date()
         // MacDashboard's own benchmark requests also appear in the log; keep only the benchmark copy.
-        guard benchmark == nil else { return }
+        guard benchmark == nil else { onChange?(); return }
         var s = sample
         if let model = status?.models.first(where: { $0.id == s.model }) {
             s.model = model.name
